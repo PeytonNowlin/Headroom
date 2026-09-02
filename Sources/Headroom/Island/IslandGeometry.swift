@@ -31,7 +31,7 @@ struct IslandLayout: Equatable {
         }
     }
 
-    static let expandedSize = CGSize(width: 360, height: 220)
+    static let expandedSize = CGSize(width: 360, height: 176)
 
     static func make(for anchor: IslandAnchor) -> IslandLayout {
         switch anchor {

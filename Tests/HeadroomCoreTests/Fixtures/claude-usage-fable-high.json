@@ -1,0 +1,9 @@
+{
+  "extra_usage": { "is_enabled": false, "monthly_limit": 0, "used_credits": 0.0, "decimal_places": 2 },
+  "limits": [
+    { "kind": "session", "group": "session", "percent": 12, "severity": "normal", "resets_at": "2026-09-02T05:00:00+00:00", "scope": null, "is_active": true },
+    { "kind": "weekly_all", "group": "weekly", "percent": 41, "severity": "normal", "resets_at": "2026-09-05T09:00:00+00:00", "scope": null, "is_active": false },
+    { "kind": "weekly_scoped", "group": "weekly", "percent": 62, "severity": "warning", "resets_at": "2026-09-05T09:00:00+00:00", "scope": { "model": { "id": null, "display_name": "Fable" }, "surface": null }, "is_active": false },
+    { "kind": "weekly_scoped", "group": "weekly", "percent": 3, "severity": "normal", "resets_at": "2026-09-05T09:00:00+00:00", "scope": { "model": { "id": null, "display_name": "Sonnet" }, "surface": null }, "is_active": false }
+  ]
+}

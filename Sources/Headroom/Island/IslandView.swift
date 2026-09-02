@@ -1,3 +1,4 @@
+import HeadroomCore
 import SwiftUI
 
 /// The SwiftUI root of the island. Draws the silhouette for the current mode and lays content
@@ -5,6 +6,7 @@ import SwiftUI
 /// else is Liquid Glass.
 struct IslandView: View {
     @Bindable var state: IslandState
+    var model: UsageModel
 
     private var shape: IslandShape {
         IslandShape(cornerRadius: state.layout.cornerRadius, flare: state.layout.flare)
@@ -47,35 +49,74 @@ struct IslandView: View {
         }
     }
 
+    // MARK: - Compact
+
     private var compactContent: some View {
-        HStack {
-            Circle().fill(Color(red: 0.196, green: 0.843, blue: 0.294)).frame(width: 6, height: 6)
-            Spacer()
-            Circle().fill(Color(red: 0.894, green: 1.0, blue: 0.102)).frame(width: 6, height: 6)
+        let providers = model.visibleProviders
+        let split = (providers.count + 1) / 2
+        return HStack(spacing: 0) {
+            HStack(spacing: 6) {
+                ForEach(providers.prefix(split)) { dot($0) }
+            }
+            .frame(maxWidth: .infinity, alignment: .trailing)
+            Color.clear.frame(width: notchWidth)
+            HStack(spacing: 6) {
+                ForEach(providers.dropFirst(split)) { dot($0) }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(.horizontal, 16)
-        .frame(height: state.layout.compact.height)
+        .padding(.horizontal, 14)
+        .frame(width: state.layout.compact.width, height: state.layout.compact.height)
     }
 
+    private func dot(_ id: ProviderID) -> some View {
+        ProviderDot(state: model.state(id), status: model.status(id))
+            .foregroundStyle(Color.white)
+    }
+
+    // MARK: - Expanded
+
     private var expandedContent: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 0) {
             if state.layout.anchor.isNotch {
                 Color.clear.frame(height: notchHeight)
             }
-            Text("Headroom")
-                .font(.system(size: 15, weight: .semibold, design: .rounded))
-            Text("No providers connected yet")
-                .font(.system(size: 12))
-                .foregroundStyle(.secondary)
+            let providers = model.visibleProviders
+            if providers.isEmpty {
+                VStack(spacing: 6) {
+                    Text("Headroom")
+                        .font(.system(size: 15, weight: .semibold, design: .rounded))
+                    Text("No AI CLI logins found")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.top, 22)
+            } else {
+                HStack(alignment: .top, spacing: 28) {
+                    ForEach(providers) { id in
+                        VStack(spacing: 6) {
+                            RingView(provider: id, state: model.state(id), status: model.status(id))
+                            Text(id.displayName)
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                .padding(.top, 18)
+            }
             Spacer(minLength: 0)
         }
-        .padding(.top, 8)
-        .padding(.bottom, 16)
+        .padding(.bottom, 14)
         .frame(width: state.layout.expanded.width, height: state.layout.expanded.height)
     }
 
     private var notchHeight: CGFloat {
         if case let .notch(_, height) = state.layout.anchor { return height }
+        return 0
+    }
+
+    private var notchWidth: CGFloat {
+        if case let .notch(width, _) = state.layout.anchor { return width }
         return 0
     }
 }
