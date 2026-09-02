@@ -10,6 +10,11 @@ final class UsageModel {
     private(set) var states: [ProviderID: ProviderState] = [:]
     private(set) var spend: [ProviderID: SpendSummary] = [:]
     private(set) var now = Date()
+    /// The banner currently showing, if any; further alerts queue behind it.
+    private(set) var activeAlert: UsageAlert?
+    private var alertQueue: [UsageAlert] = []
+    private var alertLedger: AlertLedger
+    private var bannerTask: Task<Void, Never>?
 
     let environment: HostEnvironment
     let preferences: Preferences
@@ -23,6 +28,7 @@ final class UsageModel {
         self.environment = environment
         self.preferences = preferences
         pricing = PricingStore(environment: environment)
+        alertLedger = Self.loadLedger(environment)
         let runtimes: [any ProviderRuntime] = [
             ClaudeProvider(environment: environment),
             CodexProvider(environment: environment),
@@ -50,6 +56,9 @@ final class UsageModel {
                     self.states[state.provider] = state
                     if state.snapshot != previous?.snapshot || state.rateLimitedUntil != previous?.rateLimitedUntil {
                         self.persistSnapshots()
+                    }
+                    if let snapshot = state.snapshot, snapshot != previous?.snapshot {
+                        self.evaluateAlerts(snapshot)
                     }
                 }
             })
@@ -101,6 +110,43 @@ final class UsageModel {
         return all.dropFirst().reduce(first, +)
     }
 
+    // MARK: - Alerts
+
+    private static let ledgerFile = "alerts.json"
+
+    private static func loadLedger(_ environment: HostEnvironment) -> AlertLedger {
+        guard let data = try? environment.readFile(environment.dataDirectory.appending(path: ledgerFile)),
+              let ledger = try? JSONDecoder().decode(AlertLedger.self, from: data) else { return AlertLedger() }
+        return ledger
+    }
+
+    private func evaluateAlerts(_ snapshot: Snapshot) {
+        let alerts = AlertEvaluator.evaluate(snapshot, now: environment.now(), ledger: &alertLedger)
+        if let data = try? JSONEncoder().encode(alertLedger) {
+            try? environment.writeFile(environment.dataDirectory.appending(path: Self.ledgerFile), data)
+        }
+        guard !alerts.isEmpty else { return }
+        alertQueue.append(contentsOf: alerts)
+        showNextAlert()
+    }
+
+    private func showNextAlert() {
+        guard activeAlert == nil, !alertQueue.isEmpty else { return }
+        activeAlert = alertQueue.removeFirst()
+        bannerTask?.cancel()
+        bannerTask = Task { [weak self] in
+            try? await Task.sleep(for: Motion.bannerDwell)
+            guard !Task.isCancelled else { return }
+            self?.dismissAlert()
+        }
+    }
+
+    func dismissAlert() {
+        bannerTask?.cancel()
+        activeAlert = nil
+        showNextAlert()
+    }
+
     private func persistSnapshots() {
         var entries: [ProviderID: SnapshotStore.Entry] = [:]
         for (id, state) in states {
@@ -143,6 +189,15 @@ final class UsageModel {
         let dots = dotProviders
         guard let index = dots.firstIndex(of: id) else { return .none }
         return index < (dots.count + 1) / 2 ? .left : .right
+    }
+
+    /// The soonest scheduled refresh across visible providers.
+    var nextRefreshAt: Date? {
+        visibleProviders.compactMap { states[$0]?.nextRefreshAt }.min()
+    }
+
+    var isAnyRefreshing: Bool {
+        visibleProviders.contains { states[$0]?.isRefreshing == true }
     }
 
     func state(_ id: ProviderID) -> ProviderState? { states[id] }

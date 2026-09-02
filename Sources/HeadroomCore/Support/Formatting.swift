@@ -14,6 +14,14 @@ public enum Formatting {
         return "\(seconds)s"
     }
 
+    /// `4:07` / `0:09` style clock for short waits; falls back to `countdown` past an hour.
+    public static func clock(to target: Date, from now: Date) -> String {
+        let seconds = Int(target.timeIntervalSince(now).rounded(.down))
+        guard seconds > 0 else { return "0:00" }
+        guard seconds < 3600 else { return countdown(to: target, from: now) }
+        return String(format: "%d:%02d", seconds / 60, seconds % 60)
+    }
+
     /// `$4.08`, `$0.50`, `$1,234.00`.
     public static func dollars(_ amount: Double) -> String {
         let f = NumberFormatter()

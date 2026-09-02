@@ -68,14 +68,19 @@ struct ProviderPollerTests {
         )
         await poller.start()
 
+        // One "next refresh at" announcement per completed cycle.
         var completed = 0
-        for await state in await poller.states where !state.isRefreshing {
+        var announced: [Date] = []
+        for await state in await poller.states where !state.isRefreshing && state.nextRefreshAt != nil {
             completed += 1
+            announced.append(state.nextRefreshAt!)
             if completed == 5 { break }
         }
         await poller.stop()
 
         #expect(Array(world.sleeps.prefix(4)).map(\.seconds) == [60, 60, 120, 240])
+        // The announced time is exactly when the loop wakes: now + delay at announcement.
+        #expect(announced[2].timeIntervalSince(announced[1]) == 120)
     }
 
     @Test("a snapshot reads connected for three poll intervals, then stale")

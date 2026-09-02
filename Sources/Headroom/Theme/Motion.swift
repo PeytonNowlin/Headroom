@@ -25,4 +25,11 @@ enum Motion {
     }
 
     static let hoverDwell: Duration = .milliseconds(150)
+
+    /// Banner entrance: a drop from the island, or a fade under Reduce Motion.
+    static var bannerTransition: AnyTransition {
+        reduceMotion ? .opacity : .move(edge: .top).combined(with: .opacity)
+    }
+
+    static let bannerDwell: Duration = .seconds(7)
 }

@@ -36,8 +36,17 @@ struct IslandView: View {
         .frame(width: size.width, height: size.height, alignment: .top)
         .clipShape(shape)
         .frame(width: state.layout.panel.width, height: state.layout.panel.height, alignment: .top)
+        .overlay(alignment: .top) {
+            if let alert = model.activeAlert {
+                AlertBanner(alert: alert)
+                    .padding(.top, size.height + 8)
+                    .transition(Motion.bannerTransition)
+                    .id(alert.id)
+            }
+        }
         .animation(Motion.island, value: state.mode)
         .animation(Motion.island, value: state.detailHeight)
+        .animation(Motion.island, value: model.activeAlert?.id)
     }
 
     @ViewBuilder
@@ -130,6 +139,11 @@ struct IslandView: View {
                     .padding(.trailing, 12)
                     .transition(.opacity)
             }
+        }
+        .overlay(alignment: .topLeading) {
+            RefreshCountdown(model: model)
+                .padding(.top, state.layout.anchor.notchHeight + 7)
+                .padding(.leading, 12)
         }
         .frame(width: state.layout.expandedWidth, height: state.layout.expandedHeight)
     }

@@ -39,10 +39,12 @@ public struct ProviderState: Sendable, Equatable {
     public var hasCredentials: Bool
     /// After a 429, no request (scheduled or manual) goes out before this instant.
     public var rateLimitedUntil: Date?
+    /// When the loop will next call the provider, for the UI's countdown.
+    public var nextRefreshAt: Date?
 
     public init(provider: ProviderID, snapshot: Snapshot? = nil, lastError: String? = nil,
                 consecutiveFailures: Int = 0, isRefreshing: Bool = false, hasCredentials: Bool = false,
-                rateLimitedUntil: Date? = nil) {
+                rateLimitedUntil: Date? = nil, nextRefreshAt: Date? = nil) {
         self.provider = provider
         self.snapshot = snapshot
         self.lastError = lastError
@@ -50,6 +52,7 @@ public struct ProviderState: Sendable, Equatable {
         self.isRefreshing = isRefreshing
         self.hasCredentials = hasCredentials
         self.rateLimitedUntil = rateLimitedUntil
+        self.nextRefreshAt = nextRefreshAt
     }
 
     public func isRateLimited(at now: Date) -> Bool {
@@ -115,6 +118,7 @@ public actor ProviderPoller {
             while !Task.isCancelled {
                 guard let self else { return }
                 let delay = await self.refreshAndScheduleDelay()
+                await self.announceNextRefresh(in: delay)
                 await self.waitFor(delay)
             }
         }
@@ -136,6 +140,7 @@ public actor ProviderPoller {
         }
         if let wake {
             self.wake = nil
+            publish { $0.nextRefreshAt = environment.now() }
             wake.resume()
         }
     }
@@ -158,6 +163,7 @@ public actor ProviderPoller {
             $0.isRefreshing = true
             $0.hasCredentials = credentialed
             $0.rateLimitedUntil = nil
+            $0.nextRefreshAt = nil
         }
         do {
             let snapshot = try await runtime.refresh()
@@ -207,6 +213,11 @@ public actor ProviderPoller {
             self.wake = nil
             wake.resume()
         }
+    }
+
+    private func announceNextRefresh(in delay: Duration) {
+        let at = environment.now().addingTimeInterval(delay.seconds)
+        publish { $0.nextRefreshAt = at }
     }
 
     private func publish(_ mutate: (inout ProviderState) -> Void) {

@@ -87,15 +87,29 @@ struct DetailView: View {
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
-                if status == .stale, let fetched = snapshot?.fetchedAt {
-                    Text("updated \(Formatting.countdown(to: now, from: fetched)) ago")
-                        .font(.system(size: 10))
-                        .foregroundStyle(.tertiary)
-                }
+                Text(refreshLine)
+                    .font(.system(size: 10))
+                    .foregroundStyle(.tertiary)
+                    .monospacedDigit()
             }
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+    }
+
+    private var refreshLine: String {
+        var parts: [String] = []
+        if let fetched = snapshot?.fetchedAt {
+            let age = now.timeIntervalSince(fetched)
+            parts.append(age < 60 ? "updated just now" : "updated \(Formatting.countdown(to: now, from: fetched)) ago")
+        }
+        if state?.isRefreshing == true {
+            parts.append("refreshing")
+        } else if let next = state?.nextRefreshAt {
+            let label = state?.isRateLimited(at: now) == true ? "rate limited · retry in" : "next in"
+            parts.append("\(label) \(Formatting.clock(to: next, from: now))")
+        }
+        return parts.joined(separator: " · ")
     }
 
     private var reconnect: some View {
@@ -138,10 +152,24 @@ struct WindowRow: View {
                 }
             }
             .frame(height: 5)
-            Text(resetText)
-                .font(.system(size: 10.5))
-                .foregroundStyle(.secondary)
+            HStack {
+                Text(resetText)
+                Spacer()
+                if let projection = Pace.project(window, now: now) {
+                    Text(Pace.hint(projection, now: now))
+                        .foregroundStyle(paceIsBad(projection) ? urgencyWarn : .secondary)
+                }
+            }
+            .font(.system(size: 10.5))
+            .foregroundStyle(.secondary)
         }
+    }
+
+    private var urgencyWarn: Color { Urgency.warn.color(for: scheme) }
+
+    private func paceIsBad(_ p: Pace.Projection) -> Bool {
+        if case .runsOut = p { return true }
+        return false
     }
 
     private var resetText: String {

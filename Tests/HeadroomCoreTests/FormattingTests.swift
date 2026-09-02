@@ -16,6 +16,14 @@ struct FormattingTests {
         #expect(Formatting.countdown(to: now.addingTimeInterval(-10), from: now) == "now")
     }
 
+    @Test("refresh clock reads m:ss under an hour")
+    func clock() {
+        #expect(Formatting.clock(to: now.addingTimeInterval(247), from: now) == "4:07")
+        #expect(Formatting.clock(to: now.addingTimeInterval(9), from: now) == "0:09")
+        #expect(Formatting.clock(to: now.addingTimeInterval(-3), from: now) == "0:00")
+        #expect(Formatting.clock(to: now.addingTimeInterval(4000), from: now) == "1h 6m")
+    }
+
     @Test("dollars and tokens read like the spec examples")
     func money() {
         #expect(Formatting.dollars(4.08) == "$4.08")
