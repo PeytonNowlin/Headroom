@@ -3,7 +3,7 @@ Headroom
 Portions of this software are derived from the following MIT-licensed projects:
 
 OpenUsage — https://github.com/robinebers/openusage
-Copyright (c) Robin Ebers
+Copyright (c) 2026 Robin Ebers
 Provider credential discovery, usage-API mapping, and local session-log spend
 parsing for Claude, Codex, Grok, and Cursor are ported from OpenUsage, as is the
 Cursor usage-export CSV parser. The bundled pricing supplement
@@ -11,7 +11,7 @@ Cursor usage-export CSV parser. The bundled pricing supplement
 published price list for models absent from public catalogs.
 
 Tokenly — https://github.com/itsSwanks/tokenly
-Copyright (c) itsSwanks
+Copyright (c) 2026 Tokenly contributors
 The Liquid Glass visual language, urgency color scale, ring gauge, floating
 non-activating panel technique, and callout layout are ported from Tokenly.
 

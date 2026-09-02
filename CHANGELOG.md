@@ -4,6 +4,10 @@ All notable changes to Headroom. The format follows [Keep a Changelog](https://k
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-09-02
+
+First release.
+
 ### Added
 
 - Notch-anchored Liquid Glass island with per-provider compact dots and hover-to-expand rings for Claude, Codex, Grok, and Cursor.
@@ -14,3 +18,6 @@ All notable changes to Headroom. The format follows [Keep a Changelog](https://k
 - Stays visible over full-screen apps by default; an optional setting hides it instead.
 - Alert banners at 80% and 95% of any window and when pace projects exhaustion before reset.
 - Next-refresh countdown; rate-limit cooldowns honor `Retry-After` and persist across relaunch.
+
+[Unreleased]: https://github.com/PeytonNowlin/Headroom/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/PeytonNowlin/Headroom/releases/tag/v0.1.0
