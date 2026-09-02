@@ -63,15 +63,21 @@ struct SpendFooter: View {
     }
 
     private var divider: some View {
-        Rectangle().fill(.primary.opacity(0.15)).frame(width: 1, height: 10)
+        Rectangle().fill(.primary.opacity(0.15)).frame(width: 1, height: 20)
     }
 
     private func item(_ label: String, _ tile: SpendTile) -> some View {
-        HStack(spacing: 4) {
-            Text(label).foregroundStyle(.tertiary)
-            Text(tile.hasData ? Formatting.dollars(tile.cost) : "—")
-                .fontWeight(.medium)
-                .foregroundStyle(.secondary)
+        VStack(spacing: 1) {
+            HStack(spacing: 4) {
+                Text(label).foregroundStyle(.tertiary)
+                Text(tile.hasData ? Formatting.dollars(tile.cost) : "—")
+                    .fontWeight(.medium)
+                    .foregroundStyle(.secondary)
+                    .contentTransition(.numericText())
+            }
+            Text(tile.hasData ? "\(Formatting.tokens(tile.tokens)) tok" : " ")
+                .font(.system(size: 9.5, design: .monospaced))
+                .foregroundStyle(.tertiary)
                 .contentTransition(.numericText())
         }
     }
