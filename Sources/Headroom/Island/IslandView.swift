@@ -8,6 +8,7 @@ struct IslandView: View {
     @Bindable var state: IslandState
     var model: UsageModel
     var onSelect: (ProviderID?) -> Void = { _ in }
+    var onOpenSettings: () -> Void = {}
 
     private var shape: IslandShape {
         IslandShape(cornerRadius: state.layout.cornerRadius, flare: state.layout.flare)
@@ -95,14 +96,21 @@ struct IslandView: View {
             notchSpacer
             let providers = model.visibleProviders
             if providers.isEmpty {
-                VStack(spacing: 6) {
+                VStack(spacing: 8) {
                     Text("Headroom")
                         .font(.system(size: 15, weight: .semibold, design: .rounded))
-                    Text("No AI CLI logins found")
-                        .font(.system(size: 12))
+                    Text("No AI CLI logins found — sign in with `claude`, `codex`, or `grok` and the ring appears within a few minutes.")
+                        .font(.system(size: 11.5))
                         .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, 24)
+                    Button("Settings…", action: onOpenSettings)
+                        .controlSize(.small)
+                        .buttonStyle(.glass)
+                        .padding(.top, 2)
                 }
-                .padding(.top, 22)
+                .padding(.top, 16)
             } else {
                 HStack(alignment: .top, spacing: 28) {
                     ForEach(providers) { id in

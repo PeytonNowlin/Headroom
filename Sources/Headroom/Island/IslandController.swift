@@ -12,7 +12,9 @@ final class IslandController {
     private var host: IslandHostView?
     private var dwellTask: Task<Void, Never>?
     private var screenObserver: NSObjectProtocol?
+    private var wakeObserver: NSObjectProtocol?
     private var outsideClickMonitor: Any?
+    private var hiddenForFullScreen = false
     private var hovering = false
 
     var onOpenSettings: () -> Void = {}
@@ -28,9 +30,11 @@ final class IslandController {
         guard let screen = NSScreen.main ?? NSScreen.screens.first else { return }
         let frame = IslandGeometry.panelFrame(layout: state.layout, on: screen)
         let panel = IslandPanel(frame: frame)
-        let root = IslandView(state: state, model: model) { [weak self] id in
-            self?.select(id)
-        }
+        let root = IslandView(
+            state: state, model: model,
+            onSelect: { [weak self] id in self?.select(id) },
+            onOpenSettings: { [weak self] in self?.onOpenSettings() }
+        )
         let host = IslandHostView(layout: state.layout, rootView: root)
         host.currentSize = { [state] in state.currentSize }
         host.onHoverChange = { [weak self] hovering in self?.hoverChanged(hovering) }
@@ -47,6 +51,19 @@ final class IslandController {
             queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.reanchor() }
+        }
+        // After wake the WindowServer can report stale geometry for a beat and leave a
+        // status-level panel behind other windows; re-anchor twice and re-order front.
+        wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didWakeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.reanchor()
+                try? await Task.sleep(for: .seconds(2))
+                self?.reanchor()
+            }
         }
 
         KeyboardShortcuts.onKeyUp(for: .toggleIsland) { [weak self] in
@@ -127,9 +144,23 @@ final class IslandController {
         guard let screen = NSScreen.main ?? NSScreen.screens.first, let panel else { return }
         let anchor = IslandGeometry.anchor(for: screen)
         let layout = IslandLayout.make(for: anchor)
-        state.layout = layout
-        host?.layout = layout
+        if layout != state.layout {
+            state.layout = layout
+            host?.layout = layout
+        }
         panel.setFrame(IslandGeometry.panelFrame(layout: layout, on: screen), display: true)
+        if !hiddenForFullScreen { panel.orderFrontRegardless() }
+    }
+
+    /// First launch with nothing detected: open with guidance for a moment, then collapse.
+    func showFirstRunGuidance() {
+        guard !state.pinned else { return }
+        setMode(.expanded)
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(10))
+            guard let self, !self.state.pinned, !self.hovering else { return }
+            self.setMode(.compact)
+        }
     }
 
     // MARK: - Context menu
@@ -163,6 +194,7 @@ final class IslandController {
     /// Hide/show for full-screen spaces without tearing down state.
     func setHidden(_ hidden: Bool) {
         guard let panel else { return }
+        hiddenForFullScreen = hidden
         if hidden {
             panel.orderOut(nil)
         } else {

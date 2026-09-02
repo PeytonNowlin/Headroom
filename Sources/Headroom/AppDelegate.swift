@@ -28,6 +28,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         island.show()
         model.start()
         model.preferences.registerLoginItemOnFirstRun()
+        scheduleFirstRunGuidance(model: model, island: island)
 
         self.model = model
         self.island = island
@@ -35,6 +36,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.statusItem = statusItem
         self.fullScreen = fullScreen
         observePreferences()
+    }
+
+    /// Once the first poll has settled, if nothing was detected, show guidance exactly once.
+    private func scheduleFirstRunGuidance(model: UsageModel, island: IslandController) {
+        guard !model.preferences.didCompleteFirstRun else { return }
+        Task { @MainActor in
+            for _ in 0..<40 where model.isAnyRefreshing || model.states.isEmpty {
+                try? await Task.sleep(for: .milliseconds(250))
+            }
+            model.preferences.didCompleteFirstRun = true
+            if model.visibleProviders.isEmpty {
+                island.showFirstRunGuidance()
+            }
+        }
     }
 
     /// Re-apply preference-driven side effects whenever they change.
