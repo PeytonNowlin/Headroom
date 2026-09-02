@@ -114,8 +114,12 @@ struct IslandView: View {
                 .padding(.top, 18)
             }
             Spacer(minLength: 0)
+            if let total = model.totalSpend {
+                SpendFooter(summary: total)
+                    .transition(.opacity)
+            }
         }
-        .padding(.bottom, 14)
+        .padding(.bottom, 12)
         .frame(width: state.layout.expandedWidth, height: state.layout.expandedHeight)
     }
 
@@ -129,6 +133,7 @@ struct IslandView: View {
                 state: model.state(id),
                 status: model.status(id),
                 now: model.now,
+                spend: model.spend[id],
                 onBack: { onSelect(nil) }
             )
             .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in

@@ -39,6 +39,16 @@ final class TestWorld: Sendable {
         state.withLock { $0.files[path] = Data(contents.utf8) }
     }
 
+    func append(_ relativeToHome: String, _ contents: String) {
+        let path = home.appending(path: relativeToHome).path(percentEncoded: false)
+        state.withLock { $0.files[path, default: Data()].append(Data(contents.utf8)) }
+    }
+
+    func fileContents(_ relativeToHome: String) -> Data? {
+        let path = home.appending(path: relativeToHome).path(percentEncoded: false)
+        return state.withLock { $0.files[path] }
+    }
+
     func keychain(_ service: String, _ contents: String) {
         state.withLock { $0.keychain[service] = Data(contents.utf8) }
     }
@@ -121,6 +131,29 @@ final class TestWorld: Sendable {
                     s.now = s.now.addingTimeInterval(seconds)
                 }
                 await Task.yield()
+            },
+            enumerateFiles: { directory, ext in
+                let prefix = directory.path(percentEncoded: false) + "/"
+                return world.state.withLock { s in
+                    s.files.keys.filter { $0.hasPrefix(prefix) && $0.hasSuffix("." + ext) }
+                        .sorted().map { URL(filePath: $0) }
+                }
+            },
+            fileInfo: { url in
+                let path = url.path(percentEncoded: false)
+                return world.state.withLock { s in
+                    s.files[path].map { FileInfo(size: $0.count, modified: s.now) }
+                }
+            },
+            readFileRange: { url, offset in
+                let path = url.path(percentEncoded: false)
+                guard let data = world.state.withLock({ $0.files[path] }) else {
+                    throw CocoaError(.fileReadNoSuchFile)
+                }
+                return offset >= data.count ? Data() : data.subdata(in: offset..<data.count)
+            },
+            writeFile: { url, data in
+                world.state.withLock { $0.files[url.path(percentEncoded: false)] = data }
             }
         )
     }

@@ -30,7 +30,36 @@ extension HostEnvironment {
                 return HTTPResponse(statusCode: http?.statusCode ?? 0, headers: headers, body: data)
             },
             now: { Date() },
-            sleep: { try await Task.sleep(for: $0) }
+            sleep: { try await Task.sleep(for: $0) },
+            enumerateFiles: { directory, ext in
+                let fm = FileManager.default
+                guard let e = fm.enumerator(at: directory, includingPropertiesForKeys: [.isRegularFileKey],
+                                            options: [.skipsHiddenFiles, .skipsPackageDescendants]) else { return [] }
+                var out: [URL] = []
+                for case let url as URL in e where url.pathExtension == ext {
+                    if (try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true {
+                        out.append(url)
+                    }
+                }
+                return out
+            },
+            fileInfo: { url in
+                guard let attrs = try? FileManager.default.attributesOfItem(atPath: url.path(percentEncoded: false)),
+                      let size = attrs[.size] as? Int,
+                      let modified = attrs[.modificationDate] as? Date else { return nil }
+                return FileInfo(size: size, modified: modified)
+            },
+            readFileRange: { url, offset in
+                let handle = try FileHandle(forReadingFrom: url)
+                defer { try? handle.close() }
+                try handle.seek(toOffset: UInt64(offset))
+                return try handle.readToEnd() ?? Data()
+            },
+            writeFile: { url, data in
+                try FileManager.default.createDirectory(at: url.deletingLastPathComponent(),
+                                                        withIntermediateDirectories: true)
+                try data.write(to: url, options: .atomic)
+            }
         )
     }
 }

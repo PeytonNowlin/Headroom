@@ -69,7 +69,7 @@ struct IslandLayout: Equatable {
                 anchor: anchor,
                 compact: CGSize(width: width + 2 * 46, height: height),
                 expandedWidth: max(360, width + 2 * 46),
-                expandedHeight: 176,
+                expandedHeight: 204,
                 flare: 12,
                 cornerRadius: 14
             )
@@ -78,7 +78,7 @@ struct IslandLayout: Equatable {
                 anchor: anchor,
                 compact: CGSize(width: 132, height: 30),
                 expandedWidth: 360,
-                expandedHeight: 176 - 33,
+                expandedHeight: 204 - 33,
                 flare: 0,
                 cornerRadius: 15
             )

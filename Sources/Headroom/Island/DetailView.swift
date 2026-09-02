@@ -7,6 +7,7 @@ struct DetailView: View {
     let state: ProviderState?
     let status: ConnectionStatus
     let now: Date
+    var spend: SpendSummary?
     let onBack: () -> Void
 
     @Environment(\.colorScheme) private var scheme
@@ -45,6 +46,10 @@ struct DetailView: View {
                 } else {
                     ProgressView().controlSize(.small)
                 }
+            }
+            if let spend {
+                SpendTiles(summary: spend)
+                    .padding(.top, 4)
             }
         }
         .padding(.horizontal, 18)

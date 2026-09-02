@@ -8,19 +8,28 @@ import Observation
 @Observable
 final class UsageModel {
     private(set) var states: [ProviderID: ProviderState] = [:]
+    private(set) var spend: [ProviderID: SpendSummary] = [:]
     private(set) var now = Date()
 
     let environment: HostEnvironment
     private var pollers: [ProviderID: ProviderPoller] = [:]
+    private var scanners: [ProviderID: SpendScanner] = [:]
+    private let pricing: PricingStore
     private var tasks: [Task<Void, Never>] = []
+    static let spendInterval: Duration = .seconds(120)
 
     init(environment: HostEnvironment = .live()) {
         self.environment = environment
+        pricing = PricingStore(environment: environment)
         let runtimes: [any ProviderRuntime] = [
             ClaudeProvider(environment: environment),
             CodexProvider(environment: environment),
             GrokProvider(environment: environment),
         ]
+        let formats: [any UsageLogFormat] = [ClaudeLogFormat()]
+        for format in formats {
+            scanners[format.provider] = SpendScanner(format: format, environment: environment)
+        }
         for runtime in runtimes {
             let poller = ProviderPoller(runtime: runtime, environment: environment)
             pollers[runtime.id] = poller
@@ -44,12 +53,36 @@ final class UsageModel {
         for poller in pollers.values {
             Task { await poller.start() }
         }
+        tasks.append(Task(priority: .utility) { [weak self] in
+            while !Task.isCancelled {
+                await self?.rescanSpend()
+                try? await Task.sleep(for: Self.spendInterval)
+            }
+        })
     }
 
     func refreshAll() {
         for poller in pollers.values {
             Task { await poller.refreshNow() }
         }
+        Task { await rescanSpend() }
+    }
+
+    private func rescanSpend() async {
+        let table = await pricing.refreshIfNeeded()
+        let calendar = environment.calendar
+        for (id, scanner) in scanners {
+            guard scanner.hasLogs() else { continue }
+            let ledger = await scanner.scan()
+            spend[id] = SpendSummarizer.summarize(ledger, pricing: table, now: environment.now(), calendar: calendar)
+        }
+    }
+
+    /// Sum across every provider with spend data, or nil when none has any.
+    var totalSpend: SpendSummary? {
+        let all = visibleProviders.compactMap { spend[$0] }
+        guard let first = all.first else { return nil }
+        return all.dropFirst().reduce(first, +)
     }
 
     /// Providers worth drawing: anything with credentials, plus anything mid-first-refresh.
