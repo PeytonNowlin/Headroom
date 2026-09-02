@@ -4,6 +4,13 @@ All notable changes to Headroom. The format follows [Keep a Changelog](https://k
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-02
+
+### Changed
+
+- The island now appears on every connected display, not just the built-in one. Hover expands the island under the cursor; pinning applies to all of them. Displays without a hardware notch get a simulated one (black band flush with the top edge) in place of the old floating pill.
+- "Hide in full-screen apps" hides only the island on the display showing the full-screen app.
+
 ## [0.1.0] - 2026-09-02
 
 First release.
@@ -19,5 +26,6 @@ First release.
 - Alert banners at 80% and 95% of any window and when pace projects exhaustion before reset.
 - Next-refresh countdown; rate-limit cooldowns honor `Retry-After` and persist across relaunch.
 
-[Unreleased]: https://github.com/PeytonNowlin/Headroom/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/PeytonNowlin/Headroom/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/PeytonNowlin/Headroom/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/PeytonNowlin/Headroom/releases/tag/v0.1.0

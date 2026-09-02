@@ -16,7 +16,7 @@ Headroom reads the same credentials your CLIs already use and the same session l
 ## Requirements
 
 - macOS 26 (Tahoe) or later, Apple silicon.
-- Works on any display: with a notch the island wraps it; without one it becomes a floating pill under the menu bar.
+- An island on every display: with a notch the island wraps it; without one it draws a small notch of its own at the top center.
 - At least one of the [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Codex](https://github.com/openai/codex), or [Grok](https://x.ai) CLIs signed in, or the [Cursor](https://cursor.com) app.
 
 ## Install

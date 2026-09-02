@@ -20,9 +20,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem.onRefresh = { model.refreshAll() }
         statusItem.onTogglePin = { island.togglePinned() }
         statusItem.onSettings = { settings.show() }
-        fullScreen.onChange = { [weak self] active in
+        fullScreen.onChange = { [weak self] displays in
             guard let self, let model = self.model else { return }
-            self.island?.setHidden(active && model.preferences.hideInFullScreen)
+            self.island?.setHidden(on: model.preferences.hideInFullScreen ? displays : [])
         }
 
         island.show()
@@ -57,7 +57,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let model, let statusItem, let island, let fullScreen else { return }
         withObservationTracking {
             statusItem.isShown = model.preferences.showMenuBarIcon
-            island.setHidden(fullScreen.isFullScreen && model.preferences.hideInFullScreen)
+            island.setHidden(on: model.preferences.hideInFullScreen ? fullScreen.fullScreenDisplays : [])
         } onChange: {
             Task { @MainActor [weak self] in self?.observePreferences() }
         }

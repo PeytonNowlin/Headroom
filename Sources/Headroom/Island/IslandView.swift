@@ -20,9 +20,9 @@ struct IslandView: View {
         return CGSize(width: s.width + state.layout.flare * 2, height: s.height)
     }
 
-    /// Solid bezel instead of glass, only for compact on a notch so the band reads as the notch.
+    /// Solid bezel instead of glass while compact, so the band reads as the notch.
     private var isBlack: Bool {
-        state.layout.anchor.isNotch && state.mode == .compact
+        state.mode == .compact
     }
 
     var body: some View {
@@ -82,7 +82,7 @@ struct IslandView: View {
                 ForEach(providers.prefix(split)) { dot($0) }
             }
             .frame(maxWidth: .infinity, alignment: .trailing)
-            Color.clear.frame(width: state.layout.anchor.notchWidth)
+            Color.clear.frame(width: state.layout.anchor.compactGap)
             HStack(spacing: 6) {
                 ForEach(providers.dropFirst(split)) { dot($0) }
             }
@@ -185,11 +185,9 @@ struct IslandView: View {
         .frame(height: state.currentSize.height, alignment: .top)
     }
 
-    @ViewBuilder
+    /// Keeps content out of the hardware notch's band; collapses to nothing when simulated.
     private var notchSpacer: some View {
-        if state.layout.anchor.isNotch {
-            Color.clear.frame(height: state.layout.anchor.notchHeight)
-        }
+        Color.clear.frame(height: state.layout.anchor.notchHeight)
     }
 }
 

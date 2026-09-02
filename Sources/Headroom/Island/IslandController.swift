@@ -3,54 +3,33 @@ import HeadroomCore
 import KeyboardShortcuts
 import SwiftUI
 
-/// Owns the island panel, its state machine, and screen anchoring.
+/// Owns one island per display and the behaviour they share: pinning, the global hotkey, and
+/// tracking displays as they come and go. Hover and mode are per island (see `IslandInstance`).
 @MainActor
 final class IslandController {
-    private let state: IslandState
     private let model: UsageModel
-    private var panel: IslandPanel?
-    private var host: IslandHostView?
-    private var dwellTask: Task<Void, Never>?
+    private var instances: [CGDirectDisplayID: IslandInstance] = [:]
+    private var pinned = false
+    private var hiddenDisplays: Set<CGDirectDisplayID> = []
     private var screenObserver: NSObjectProtocol?
     private var wakeObserver: NSObjectProtocol?
     private var outsideClickMonitor: Any?
-    private var hiddenForFullScreen = false
-    private var hovering = false
 
     var onOpenSettings: () -> Void = {}
 
     init(model: UsageModel) {
         self.model = model
-        let screen = NSScreen.main ?? NSScreen.screens[0]
-        let anchor = IslandGeometry.anchor(for: screen)
-        state = IslandState(layout: IslandLayout.make(for: anchor))
     }
 
     func show() {
-        guard let screen = NSScreen.main ?? NSScreen.screens.first else { return }
-        let frame = IslandGeometry.panelFrame(layout: state.layout, on: screen)
-        let panel = IslandPanel(frame: frame)
-        let root = IslandView(
-            state: state, model: model,
-            onSelect: { [weak self] id in self?.select(id) },
-            onOpenSettings: { [weak self] in self?.onOpenSettings() }
-        )
-        let host = IslandHostView(layout: state.layout, rootView: root)
-        host.currentSize = { [state] in state.currentSize }
-        host.onHoverChange = { [weak self] hovering in self?.hoverChanged(hovering) }
-        host.onRightClick = { [weak self] event in self?.showContextMenu(for: event) }
-        host.onBackgroundClick = { [weak self] in self?.togglePinned() }
-        panel.contentView = host
-        panel.orderFrontRegardless()
-        self.panel = panel
-        self.host = host
+        syncScreens()
 
         screenObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification,
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.reanchor() }
+            MainActor.assumeIsolated { self?.syncScreens() }
         }
         // After wake the WindowServer can report stale geometry for a beat and leave a
         // status-level panel behind other windows; re-anchor twice and re-order front.
@@ -60,9 +39,9 @@ final class IslandController {
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
-                self?.reanchor()
+                self?.syncScreens()
                 try? await Task.sleep(for: .seconds(2))
-                self?.reanchor()
+                self?.syncScreens()
             }
         }
 
@@ -71,67 +50,110 @@ final class IslandController {
         }
     }
 
+    // MARK: - Displays
+
+    /// Reconcile islands with the current set of displays: re-anchor the ones that remain, add
+    /// one for each new display, drop the ones whose display is gone.
+    private func syncScreens() {
+        var seen: Set<CGDirectDisplayID> = []
+        for screen in NSScreen.screens {
+            guard let id = screen.displayID else { continue }
+            seen.insert(id)
+            if let instance = instances[id] {
+                instance.reanchor(to: screen)
+            } else {
+                instances[id] = makeInstance(on: screen)
+            }
+        }
+        for id in Set(instances.keys).subtracting(seen) {
+            instances.removeValue(forKey: id)?.close()
+        }
+    }
+
+    private func makeInstance(on screen: NSScreen) -> IslandInstance {
+        let id = screen.displayID ?? 0
+        let layout = IslandLayout.make(for: IslandGeometry.anchor(for: screen))
+        let state = IslandState(layout: layout)
+        state.pinned = pinned
+        let root = IslandView(
+            state: state, model: model,
+            onSelect: { [weak self] provider in self?.select(provider, on: id) },
+            onOpenSettings: { [weak self] in self?.onOpenSettings() }
+        )
+        let host = IslandHostView(layout: layout, rootView: root)
+        host.currentSize = { [state] in state.currentSize }
+        host.onHoverChange = { [weak self] hovering in self?.hoverChanged(hovering, on: id) }
+        host.onRightClick = { [weak self] event in self?.showContextMenu(for: event, on: id) }
+        host.onBackgroundClick = { [weak self] in self?.togglePinned() }
+        let panel = IslandPanel(frame: IslandGeometry.panelFrame(layout: layout, on: screen))
+        panel.contentView = host
+
+        let instance = IslandInstance(displayID: id, state: state, panel: panel, host: host)
+        instance.setHidden(hiddenDisplays.contains(id))
+        if pinned { instance.setMode(.expanded) }
+        return instance
+    }
+
     // MARK: - State machine
 
-    private func hoverChanged(_ hovering: Bool) {
-        self.hovering = hovering
-        dwellTask?.cancel()
+    private func hoverChanged(_ hovering: Bool, on id: CGDirectDisplayID) {
+        guard let instance = instances[id] else { return }
+        instance.hovering = hovering
+        instance.dwellTask?.cancel()
         if hovering {
-            guard state.mode == .compact else { return }
-            dwellTask = Task { [weak self] in
+            guard instance.state.mode == .compact else { return }
+            instance.dwellTask = Task { [weak instance] in
                 try? await Task.sleep(for: Motion.hoverDwell)
-                guard !Task.isCancelled, let self else { return }
-                self.setMode(.expanded)
+                guard !Task.isCancelled, let instance else { return }
+                instance.setMode(.expanded)
             }
-        } else if !state.pinned {
+        } else if !pinned {
             // Brief grace so a re-entry a few milliseconds later cancels the collapse instead of
             // interrupting the expand transition midway.
-            dwellTask = Task { [weak self] in
+            instance.dwellTask = Task { [weak self, weak instance] in
                 try? await Task.sleep(for: Motion.collapseGrace)
-                guard !Task.isCancelled, let self, !self.hovering, !self.state.pinned else { return }
-                self.setMode(.compact)
+                guard !Task.isCancelled, let self, let instance, !instance.hovering, !self.pinned else { return }
+                instance.setMode(.compact)
             }
         }
     }
 
-    private func select(_ id: ProviderID?) {
-        if let id {
-            setMode(.detail(id))
+    private func select(_ provider: ProviderID?, on id: CGDirectDisplayID) {
+        guard let instance = instances[id] else { return }
+        if let provider {
+            instance.setMode(.detail(provider))
         } else {
-            setMode(.expanded)
+            instance.setMode(.expanded)
         }
     }
 
-    /// Pin open (from any state) or unpin and collapse.
+    /// Pin every island open (from any state) or unpin them all and collapse.
     func togglePinned() {
-        if state.pinned {
-            state.pinned = false
-            stopOutsideClickMonitor()
-            if !hovering { setMode(.compact) }
-        } else {
-            state.pinned = true
-            if state.mode == .compact { setMode(.expanded) }
+        pinned.toggle()
+        for instance in instances.values {
+            instance.state.pinned = pinned
+            if pinned {
+                if instance.state.mode == .compact { instance.setMode(.expanded) }
+            } else if !instance.hovering {
+                instance.setMode(.compact)
+            }
+        }
+        if pinned {
             startOutsideClickMonitor()
+        } else {
+            stopOutsideClickMonitor()
         }
     }
 
-    private func setMode(_ mode: IslandMode) {
-        guard state.mode != mode else { return }
-        HeadroomLog.polling.debug("island mode -> \(String(describing: mode), privacy: .public)")
-        withAnimation(Motion.island) {
-            state.mode = mode
-        }
-        host?.refreshHover()
-    }
-
-    /// While pinned, a click anywhere else on screen unpins. Global mouse monitors need no
+    /// While pinned, a click anywhere outside every island unpins. Global mouse monitors need no
     /// special permission, unlike key monitors.
     private func startOutsideClickMonitor() {
         guard outsideClickMonitor == nil else { return }
-        outsideClickMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
+        outsideClickMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
             MainActor.assumeIsolated {
-                guard let self, self.state.pinned, let panel = self.panel else { return }
-                if !panel.frame.contains(NSEvent.mouseLocation) {
+                guard let self, self.pinned else { return }
+                let location = NSEvent.mouseLocation
+                if !self.instances.values.contains(where: { $0.panel.frame.contains(location) }) {
                     self.togglePinned()
                 }
             }
@@ -145,42 +167,30 @@ final class IslandController {
         }
     }
 
-    // MARK: - Screen changes
-
-    private func reanchor() {
-        guard let screen = NSScreen.main ?? NSScreen.screens.first, let panel else { return }
-        let anchor = IslandGeometry.anchor(for: screen)
-        let layout = IslandLayout.make(for: anchor)
-        if layout != state.layout {
-            state.layout = layout
-            host?.layout = layout
-        }
-        panel.setFrame(IslandGeometry.panelFrame(layout: layout, on: screen), display: true)
-        if !hiddenForFullScreen { panel.orderFrontRegardless() }
-    }
-
     /// First launch with nothing detected: open with guidance for a moment, then collapse.
     func showFirstRunGuidance() {
-        guard !state.pinned else { return }
-        setMode(.expanded)
+        guard !pinned else { return }
+        for instance in instances.values { instance.setMode(.expanded) }
         Task { [weak self] in
             try? await Task.sleep(for: .seconds(10))
-            guard let self, !self.state.pinned, !self.hovering else { return }
-            self.setMode(.compact)
+            guard let self, !self.pinned else { return }
+            for instance in self.instances.values where !instance.hovering {
+                instance.setMode(.compact)
+            }
         }
     }
 
     // MARK: - Context menu
 
-    private func showContextMenu(for event: NSEvent) {
-        guard let host else { return }
+    private func showContextMenu(for event: NSEvent, on id: CGDirectDisplayID) {
+        guard let instance = instances[id] else { return }
         let menu = NSMenu()
 
         let refresh = NSMenuItem(title: "Refresh Now", action: #selector(refreshNow), keyEquivalent: "r")
         refresh.target = self
         menu.addItem(refresh)
 
-        let pin = NSMenuItem(title: state.pinned ? "Unpin" : "Pin Open", action: #selector(pinFromMenu), keyEquivalent: "")
+        let pin = NSMenuItem(title: pinned ? "Unpin" : "Pin Open", action: #selector(pinFromMenu), keyEquivalent: "")
         pin.target = self
         if let shortcut = KeyboardShortcuts.getShortcut(for: .toggleIsland) {
             pin.keyEquivalent = shortcut.nsMenuItemKeyEquivalent ?? ""
@@ -195,17 +205,14 @@ final class IslandController {
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit Headroom", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
 
-        NSMenu.popUpContextMenu(menu, with: event, for: host)
+        NSMenu.popUpContextMenu(menu, with: event, for: instance.host)
     }
 
-    /// Hide/show for full-screen spaces without tearing down state.
-    func setHidden(_ hidden: Bool) {
-        guard let panel else { return }
-        hiddenForFullScreen = hidden
-        if hidden {
-            panel.orderOut(nil)
-        } else {
-            panel.orderFrontRegardless()
+    /// Hide the islands on the given displays (full-screen spaces) and show the rest.
+    func setHidden(on displays: Set<CGDirectDisplayID>) {
+        hiddenDisplays = displays
+        for (id, instance) in instances {
+            instance.setHidden(displays.contains(id))
         }
     }
 
