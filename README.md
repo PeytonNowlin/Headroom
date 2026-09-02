@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/headroom-logo.png" alt="Headroom" width="720">
+</p>
+
 # Headroom
 
 A quota island for your MacBook notch. Headroom shows how much headroom you have left on Claude, Codex, Grok, and Cursor — as tiny dots beside the notch, as draining rings when you hover, and as full quota windows, reset countdowns, and local spend when you click in.
