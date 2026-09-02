@@ -47,7 +47,10 @@ final class IslandHostView: NSView {
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
-        if let trackingArea { removeTrackingArea(trackingArea) }
+        // `.inVisibleRect` tracks the whole visible bounds, so the area never needs rebuilding.
+        // Rebuilding it on every layout pass (SwiftUI lays out on each countdown tick) makes
+        // AppKit emit exit/enter pairs under a stationary cursor, which flaps the island.
+        guard trackingArea == nil else { return }
         let area = NSTrackingArea(
             rect: bounds,
             options: [.mouseMoved, .mouseEnteredAndExited, .activeAlways, .inVisibleRect],
@@ -80,7 +83,13 @@ final class IslandHostView: NSView {
     }
 
     override func mouseExited(with event: NSEvent) {
-        hovering = false
+        // Trust the cursor's real position over the event: exits can arrive while it's still inside.
+        hovering = cursorInsideIsland()
+    }
+
+    private func cursorInsideIsland() -> Bool {
+        guard let window else { return false }
+        return islandContains(convert(window.mouseLocationOutsideOfEventStream, from: nil))
     }
 
     override func mouseDown(with event: NSEvent) {
@@ -97,8 +106,6 @@ final class IslandHostView: NSView {
 
     /// Re-evaluate hover after the island changes size under a stationary cursor.
     func refreshHover() {
-        guard let window else { return }
-        let windowPoint = window.convertPoint(fromScreen: NSEvent.mouseLocation)
-        hovering = islandContains(convert(windowPoint, from: nil))
+        hovering = cursorInsideIsland()
     }
 }

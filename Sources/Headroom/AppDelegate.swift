@@ -17,18 +17,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let fullScreen = FullScreenObserver()
 
         island.onOpenSettings = { settings.show() }
-        island.onHoverBegan = { fullScreen.evaluate() }
         statusItem.onRefresh = { model.refreshAll() }
         statusItem.onTogglePin = { island.togglePinned() }
         statusItem.onSettings = { settings.show() }
         fullScreen.onChange = { [weak self] active in
             guard let self, let model = self.model else { return }
-            self.island?.setFullScreenActive(active)
             self.island?.setHidden(active && model.preferences.hideInFullScreen)
         }
 
         island.show()
-        island.setFullScreenActive(fullScreen.isFullScreen)
         model.start()
         model.preferences.registerLoginItemOnFirstRun()
         scheduleFirstRunGuidance(model: model, island: island)

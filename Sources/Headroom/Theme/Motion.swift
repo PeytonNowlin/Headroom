@@ -25,6 +25,7 @@ enum Motion {
     }
 
     static let hoverDwell: Duration = .milliseconds(150)
+    static let collapseGrace: Duration = .milliseconds(120)
 
     /// Banner entrance: a drop from the island, or a fade under Reduce Motion.
     static var bannerTransition: AnyTransition {

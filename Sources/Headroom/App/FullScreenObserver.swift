@@ -31,20 +31,29 @@ final class FullScreenObserver {
               let windows = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]]
         else { return false }
         let ownPID = ProcessInfo.processInfo.processIdentifier
-        // CG uses a top-left origin on the primary display; compare sizes only to stay robust.
-        // On a notched display a native full-screen window stops below the notch band, so it is
-        // shorter than the screen by the top safe-area inset.
+        // CG uses a top-left origin on the primary display. A native full-screen window spans the
+        // width and stops below the notch band, so it is shorter than the screen by the top
+        // safe-area inset; a zoomed window has the very same geometry. What separates them is the
+        // menu bar: the WindowServer's menu bar window is on screen for a desktop and hidden
+        // (off screen) for a full-screen space.
         let screenSize = screen.frame.size
         let minHeight = screenSize.height - screen.safeAreaInsets.top - 1
+        var coveringWindow = false
+        var menuBarVisible = false
         for window in windows {
-            guard (window[kCGWindowLayer as String] as? Int) == 0,
-                  (window[kCGWindowOwnerPID as String] as? pid_t) != ownPID,
+            guard let layer = window[kCGWindowLayer as String] as? Int,
                   let bounds = window[kCGWindowBounds as String] as? [String: CGFloat],
-                  let w = bounds["Width"], let h = bounds["Height"] else { continue }
-            if abs(w - screenSize.width) < 1 && h >= minHeight {
-                return true
+                  let w = bounds["Width"], let h = bounds["Height"], let y = bounds["Y"] else { continue }
+            let owner = window[kCGWindowOwnerName as String] as? String
+            if layer == NSWindow.Level.mainMenu.rawValue, owner == "Window Server",
+               abs(w - screenSize.width) < 1, h <= 60, y > -0.5 {
+                menuBarVisible = true
+            }
+            if layer == 0, (window[kCGWindowOwnerPID as String] as? pid_t) != ownPID,
+               abs(w - screenSize.width) < 1, h >= minHeight {
+                coveringWindow = true
             }
         }
-        return false
+        return coveringWindow && !menuBarVisible
     }
 }

@@ -18,8 +18,6 @@ final class IslandController {
     private var hovering = false
 
     var onOpenSettings: () -> Void = {}
-    /// Called as the cursor arrives so full-screen state is re-probed before the body is chosen.
-    var onHoverBegan: () -> Void = {}
 
     init(model: UsageModel) {
         self.model = model
@@ -79,7 +77,6 @@ final class IslandController {
         self.hovering = hovering
         dwellTask?.cancel()
         if hovering {
-            onHoverBegan()
             guard state.mode == .compact else { return }
             dwellTask = Task { [weak self] in
                 try? await Task.sleep(for: Motion.hoverDwell)
@@ -87,7 +84,13 @@ final class IslandController {
                 self.setMode(.expanded)
             }
         } else if !state.pinned {
-            setMode(.compact)
+            // Brief grace so a re-entry a few milliseconds later cancels the collapse instead of
+            // interrupting the expand transition midway.
+            dwellTask = Task { [weak self] in
+                try? await Task.sleep(for: Motion.collapseGrace)
+                guard !Task.isCancelled, let self, !self.hovering, !self.state.pinned else { return }
+                self.setMode(.compact)
+            }
         }
     }
 
@@ -114,7 +117,7 @@ final class IslandController {
 
     private func setMode(_ mode: IslandMode) {
         guard state.mode != mode else { return }
-        HeadroomLog.polling.debug("island mode -> \(String(describing: mode), privacy: .public) fullScreen=\(self.state.fullScreenActive)")
+        HeadroomLog.polling.debug("island mode -> \(String(describing: mode), privacy: .public)")
         withAnimation(Motion.island) {
             state.mode = mode
         }
@@ -193,12 +196,6 @@ final class IslandController {
         menu.addItem(withTitle: "Quit Headroom", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
 
         NSMenu.popUpContextMenu(menu, with: event, for: host)
-    }
-
-    /// Switches the body to solid bezel while a full-screen app owns the space.
-    func setFullScreenActive(_ active: Bool) {
-        guard state.fullScreenActive != active else { return }
-        withAnimation(Motion.materialize) { state.fullScreenActive = active }
     }
 
     /// Hide/show for full-screen spaces without tearing down state.

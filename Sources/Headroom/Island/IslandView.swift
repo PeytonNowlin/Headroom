@@ -20,30 +20,30 @@ struct IslandView: View {
         return CGSize(width: s.width + state.layout.flare * 2, height: s.height)
     }
 
-    /// Solid bezel instead of glass: compact on a notch (so it reads as the notch), or any mode
-    /// while a full-screen app owns the space (where glass has nothing to sample).
+    /// Solid bezel instead of glass, only for compact on a notch so the band reads as the notch.
     private var isBlack: Bool {
-        (state.layout.anchor.isNotch && state.mode == .compact) || state.fullScreenActive
+        state.layout.anchor.isNotch && state.mode == .compact
     }
 
     var body: some View {
         ZStack(alignment: .top) {
-            // Gate the glass with `if`, never opacity: a glass view faded to 0 still owns a backdrop
-            // layer, and when that layer is rasterized offscreen in a transparent window it can't
-            // sample the desktop and paints the whole panel black until the compositor recovers.
+            // The glass is permanent and untouched: never inserted or removed, never masked, never
+            // faded. Any of those makes Core Animation rasterize its backdrop layer offscreen, where
+            // it can't sample the desktop, and the island (or the whole panel) paints black. So the
+            // bezel is an opaque overlay on top of it, and only the content is clipped.
+            Color.clear
+                .glassEffect(.regular, in: shape)
             if isBlack {
                 shape.fill(.black)
-            } else {
-                Color.clear
-                    .glassEffect(.regular, in: shape)
-                    .glassEffectTransition(.materialize)
+                    .transition(.asymmetric(insertion: .opacity, removal: .identity))
             }
             content
                 .padding(.horizontal, state.layout.flare)
                 .environment(\.colorScheme, isBlack ? .dark : colorScheme)
+                .frame(width: size.width, height: size.height, alignment: .top)
+                .clipShape(shape)
         }
         .frame(width: size.width, height: size.height, alignment: .top)
-        .clipShape(shape)
         .frame(width: state.layout.panel.width, height: state.layout.panel.height, alignment: .top)
         .overlay(alignment: .top) {
             if let alert = model.activeAlert {

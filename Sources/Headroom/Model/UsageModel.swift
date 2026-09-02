@@ -9,6 +9,10 @@ import Observation
 final class UsageModel {
     private(set) var states: [ProviderID: ProviderState] = [:]
     private(set) var spend: [ProviderID: SpendSummary] = [:]
+    /// Providers the last rescan expected spend from: local logs, or a Cursor login. Captured
+    /// there, never derived in a view: the checks behind it shell out (sqlite3, security) and
+    /// must stay off the main thread and out of SwiftUI body evaluation.
+    private(set) var spendProviders: [ProviderID] = []
     private(set) var now = Date()
     /// The banner currently showing, if any; further alerts queue behind it.
     private(set) var activeAlert: UsageAlert?
@@ -96,23 +100,23 @@ final class UsageModel {
     private func rescanSpend() async {
         let table = await pricing.refreshIfNeeded()
         let calendar = environment.calendar
+        var expected: [ProviderID] = []
         for (id, scanner) in scanners {
             guard scanner.hasLogs() else { continue }
+            expected.append(id)
             let ledger = await scanner.scan()
             spend[id] = SpendSummarizer.summarize(ledger, pricing: table, now: environment.now(), calendar: calendar)
         }
+        // `ledger()` is nil only without a login; the token read happens inside the actor.
         if let ledger = await cursorSpend.ledger() {
+            expected.append(.cursor)
             spend[.cursor] = SpendSummarizer.summarize(ledger, pricing: table, now: environment.now(), calendar: calendar)
         }
+        spendProviders = expected
     }
 
-    /// Providers whose spend we expect to be able to report: local logs, or a Cursor login.
-    private var spendProviders: [ProviderID] {
-        scanners.filter { $0.value.hasLogs() }.map(\.key) + (cursorSpend.hasCredentials() ? [.cursor] : [])
-    }
-
-    /// Sum across every provider with spend. Nil until all of them have reported at least once, so
-    /// a first-launch scan still in progress never shows a partial number as the total.
+    /// Sum across every provider with spend. Nil until a rescan has completed with all of them
+    /// reported, so a first-launch scan still in progress never shows a partial number as the total.
     var totalSpend: SpendSummary? {
         let expected = spendProviders
         guard !expected.isEmpty, expected.allSatisfy({ spend[$0] != nil }) else { return nil }
