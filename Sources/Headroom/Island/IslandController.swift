@@ -18,6 +18,8 @@ final class IslandController {
     private var hovering = false
 
     var onOpenSettings: () -> Void = {}
+    /// Called as the cursor arrives so full-screen state is re-probed before the body is chosen.
+    var onHoverBegan: () -> Void = {}
 
     init(model: UsageModel) {
         self.model = model
@@ -77,6 +79,7 @@ final class IslandController {
         self.hovering = hovering
         dwellTask?.cancel()
         if hovering {
+            onHoverBegan()
             guard state.mode == .compact else { return }
             dwellTask = Task { [weak self] in
                 try? await Task.sleep(for: Motion.hoverDwell)
@@ -111,6 +114,7 @@ final class IslandController {
 
     private func setMode(_ mode: IslandMode) {
         guard state.mode != mode else { return }
+        HeadroomLog.polling.debug("island mode -> \(String(describing: mode), privacy: .public) fullScreen=\(self.state.fullScreenActive)")
         withAnimation(Motion.island) {
             state.mode = mode
         }

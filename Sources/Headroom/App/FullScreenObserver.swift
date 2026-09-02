@@ -32,13 +32,16 @@ final class FullScreenObserver {
         else { return false }
         let ownPID = ProcessInfo.processInfo.processIdentifier
         // CG uses a top-left origin on the primary display; compare sizes only to stay robust.
+        // On a notched display a native full-screen window stops below the notch band, so it is
+        // shorter than the screen by the top safe-area inset.
         let screenSize = screen.frame.size
+        let minHeight = screenSize.height - screen.safeAreaInsets.top - 1
         for window in windows {
             guard (window[kCGWindowLayer as String] as? Int) == 0,
                   (window[kCGWindowOwnerPID as String] as? pid_t) != ownPID,
                   let bounds = window[kCGWindowBounds as String] as? [String: CGFloat],
                   let w = bounds["Width"], let h = bounds["Height"] else { continue }
-            if abs(w - screenSize.width) < 1 && abs(h - screenSize.height) < 1 {
+            if abs(w - screenSize.width) < 1 && h >= minHeight {
                 return true
             }
         }

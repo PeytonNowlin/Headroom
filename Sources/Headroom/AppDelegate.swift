@@ -17,6 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let fullScreen = FullScreenObserver()
 
         island.onOpenSettings = { settings.show() }
+        island.onHoverBegan = { fullScreen.evaluate() }
         statusItem.onRefresh = { model.refreshAll() }
         statusItem.onTogglePin = { island.togglePinned() }
         statusItem.onSettings = { settings.show() }
