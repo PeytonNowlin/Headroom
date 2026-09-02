@@ -77,7 +77,7 @@ public struct PricingTable: Sendable, Equatable, Codable {
     }
 }
 
-extension JSONDecoder {
+public extension JSONDecoder {
     static var pricing: JSONDecoder {
         let d = JSONDecoder()
         d.dateDecodingStrategy = .iso8601

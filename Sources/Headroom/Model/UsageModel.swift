@@ -30,14 +30,20 @@ final class UsageModel {
         for format in formats {
             scanners[format.provider] = SpendScanner(format: format, environment: environment)
         }
+        let store = SnapshotStore(environment: environment)
+        let restored = store.load()
         for runtime in runtimes {
-            let poller = ProviderPoller(runtime: runtime, environment: environment)
+            let poller = ProviderPoller(runtime: runtime, environment: environment,
+                                        initialSnapshot: restored[runtime.id])
             pollers[runtime.id] = poller
-            states[runtime.id] = ProviderState(provider: runtime.id)
+            states[runtime.id] = ProviderState(provider: runtime.id, snapshot: restored[runtime.id],
+                                               hasCredentials: runtime.hasLocalCredentials())
             tasks.append(Task { [weak self] in
                 for await state in poller.states {
                     guard let self else { return }
+                    let changed = state.snapshot != self.states[state.provider]?.snapshot
                     self.states[state.provider] = state
+                    if changed { self.persistSnapshots() }
                 }
             })
         }
@@ -88,12 +94,21 @@ final class UsageModel {
         return all.dropFirst().reduce(first, +)
     }
 
-    /// Providers worth drawing: anything with credentials, plus anything mid-first-refresh.
+    private func persistSnapshots() {
+        var snapshots: [ProviderID: Snapshot] = [:]
+        for (id, state) in states {
+            if let s = state.snapshot, s.status != .absent { snapshots[id] = s }
+        }
+        SnapshotStore(environment: environment).save(snapshots)
+    }
+
+    /// Providers worth drawing: anything with local credentials, anything with a non-absent
+    /// snapshot, and anything mid-first-refresh. A failing provider stays on screen.
     var visibleProviders: [ProviderID] {
         ProviderID.allCases.filter { id in
             guard let state = states[id] else { return false }
-            if let snapshot = state.snapshot { return snapshot.status != .absent }
-            return state.isRefreshing
+            if let snapshot = state.snapshot { return snapshot.status != .absent || state.hasCredentials }
+            return state.hasCredentials || state.isRefreshing
         }
     }
 

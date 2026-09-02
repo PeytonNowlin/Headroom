@@ -62,7 +62,7 @@ public struct GrokProvider: ProviderRuntime {
             snapshot.note = Self.teamNote
             return snapshot
         default:
-            throw ProviderError.transient(statusCode: response.statusCode)
+            throw ProviderError.fromResponse(response)
         }
     }
 

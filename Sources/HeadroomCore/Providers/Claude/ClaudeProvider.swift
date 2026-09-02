@@ -49,7 +49,7 @@ public struct ClaudeProvider: ProviderRuntime {
         case 401, 403:
             return .expired(.claude, at: now, planName: credential.planName)
         default:
-            throw ProviderError.transient(statusCode: response.statusCode)
+            throw ProviderError.fromResponse(response)
         }
     }
 }

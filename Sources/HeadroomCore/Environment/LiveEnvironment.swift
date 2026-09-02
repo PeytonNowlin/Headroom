@@ -81,7 +81,11 @@ enum Keychain {
         }
         let data = out.fileHandleForReading.readDataToEndOfFile()
         process.waitUntilExit()
-        guard process.terminationStatus == 0 else { return nil }
+        guard process.terminationStatus == 0 else {
+            HeadroomLog.credentials.error("security find-generic-password for \(service, privacy: .public) exited \(process.terminationStatus)")
+            return nil
+        }
+        HeadroomLog.credentials.debug("keychain item \(service, privacy: .public): \(data.count) bytes")
         // `security -w` prints hex for non-UTF8 payloads and appends a newline otherwise.
         if let text = String(data: data, encoding: .utf8) {
             let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)

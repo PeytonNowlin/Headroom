@@ -21,9 +21,20 @@ struct DetailView: View {
             case .expired:
                 reconnect
             case .absent:
-                Text("Not signed in")
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
+                if let error = state?.lastError {
+                    HStack(spacing: 8) {
+                        Image(systemName: "exclamationmark.triangle")
+                            .foregroundStyle(.secondary)
+                        Text(error == "Rate limited" ? "Rate limited by the provider — retrying shortly" : "Couldn't reach the provider — \(error)")
+                            .font(.system(size: 12))
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.vertical, 6)
+                } else {
+                    Text("Not signed in")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                }
             case .connected, .stale:
                 if let snapshot {
                     VStack(spacing: 8) {

@@ -49,5 +49,16 @@ public protocol ProviderRuntime: Sendable {
 
 public enum ProviderError: Error, Sendable, Equatable {
     case transient(statusCode: Int?)
+    /// HTTP 429; `retryAfter` is the server's hint in seconds when it sent one.
+    case rateLimited(retryAfter: TimeInterval?)
     case malformedResponse(String)
+
+    /// Maps a non-success HTTP response to the right retryable error.
+    public static func fromResponse(_ response: HTTPResponse) -> ProviderError {
+        if response.statusCode == 429 {
+            let hint = response.headers["retry-after"].flatMap { TimeInterval($0.trimmingCharacters(in: .whitespaces)) }
+            return .rateLimited(retryAfter: hint)
+        }
+        return .transient(statusCode: response.statusCode)
+    }
 }

@@ -18,7 +18,8 @@ struct RingView: View {
     private var usedPercent: Double? { snapshot?.ringUsedPercent }
     private var remaining: Double? { snapshot?.ringRemainingPercent }
     private var urgency: Urgency? { usedPercent.map(Urgency.init(usedPercent:)) }
-    private var isLoading: Bool { snapshot == nil }
+    private var isErrored: Bool { state?.isErrored == true }
+    private var isLoading: Bool { snapshot == nil && !isErrored }
 
     var body: some View {
         VStack(spacing: 6) {
@@ -29,6 +30,9 @@ struct RingView: View {
                 if status == .expired {
                     Circle()
                         .stroke(.secondary, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round, dash: [4, 5]))
+                } else if isErrored {
+                    Circle()
+                        .stroke(.secondary.opacity(0.5), style: StrokeStyle(lineWidth: lineWidth, lineCap: .round, dash: [1.5, 4]))
                 } else if isLoading {
                     Circle()
                         .trim(from: 0, to: 0.23)
@@ -86,7 +90,7 @@ struct RingView: View {
     private var label: String {
         switch status {
         case .expired: return "—"
-        case .absent: return "—"
+        case .absent: return isErrored ? "!" : (isLoading ? "…" : "—")
         case .connected, .stale:
             guard let remaining else { return isLoading ? "…" : "—" }
             return "\(Int(remaining.rounded()))%"
@@ -110,7 +114,7 @@ struct ProviderDot: View {
     private var color: Color {
         switch status {
         case .expired: return .secondary.opacity(0.6)
-        case .absent: return .clear
+        case .absent: return state?.hasCredentials == true ? .secondary.opacity(0.4) : .clear
         case .connected, .stale:
             guard let used = state?.snapshot?.ringUsedPercent else { return .secondary.opacity(0.4) }
             return Urgency(usedPercent: used).color(for: scheme)

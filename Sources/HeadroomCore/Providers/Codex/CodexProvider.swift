@@ -54,7 +54,7 @@ public struct CodexProvider: ProviderRuntime {
         case 401, 403:
             return .expired(.codex, at: now)
         default:
-            throw ProviderError.transient(statusCode: response.statusCode)
+            throw ProviderError.fromResponse(response)
         }
     }
 }

@@ -28,17 +28,25 @@ public struct ProviderState: Sendable, Equatable {
     public var lastError: String?
     public var consecutiveFailures: Int
     public var isRefreshing: Bool
+    /// Whether any credential source exists locally, independent of whether a refresh has
+    /// succeeded. A provider with credentials stays visible even while every refresh fails.
+    public var hasCredentials: Bool
 
     public init(provider: ProviderID, snapshot: Snapshot? = nil, lastError: String? = nil,
-                consecutiveFailures: Int = 0, isRefreshing: Bool = false) {
+                consecutiveFailures: Int = 0, isRefreshing: Bool = false, hasCredentials: Bool = false) {
         self.provider = provider
         self.snapshot = snapshot
         self.lastError = lastError
         self.consecutiveFailures = consecutiveFailures
         self.isRefreshing = isRefreshing
+        self.hasCredentials = hasCredentials
     }
 
-    public static let stalenessWindow: TimeInterval = 5 * 60
+    /// True when we have credentials but no snapshot and the last attempt failed.
+    public var isErrored: Bool { snapshot == nil && lastError != nil }
+
+    /// Three missed polls before a snapshot reads as stale.
+    public static let stalenessWindow: TimeInterval = 3 * ProviderPoller.defaultInterval
 
     /// Connection status at `now`, folding staleness in.
     public func status(at now: Date) -> ConnectionStatus {
@@ -66,13 +74,21 @@ public actor ProviderPoller {
 
     public nonisolated let states: AsyncStream<ProviderState>
 
+    /// Poll cadence, matching OpenUsage: one fetch per provider every five minutes, plus launch
+    /// and the manual Refresh. Anything faster invites 429s from the usage endpoints.
+    public static let defaultInterval: TimeInterval = 5 * 60
+    /// Minimum wait after a 429 when the server gives no hint.
+    public static let rateLimitFloor: Duration = .seconds(10 * 60)
+
     public init(runtime: any ProviderRuntime, environment: HostEnvironment,
-                interval: Duration = .seconds(60), backoff: BackoffPolicy = .standard) {
+                interval: Duration = .seconds(defaultInterval), backoff: BackoffPolicy = .standard,
+                initialSnapshot: Snapshot? = nil) {
         self.runtime = runtime
         self.environment = environment
         self.interval = interval
         self.backoff = backoff
-        self.state = ProviderState(provider: runtime.id)
+        self.state = ProviderState(provider: runtime.id, snapshot: initialSnapshot,
+                                   hasCredentials: runtime.hasLocalCredentials())
         var cont: AsyncStream<ProviderState>.Continuation?
         self.states = AsyncStream(bufferingPolicy: .bufferingNewest(8)) { cont = $0 }
         self.continuation = cont
@@ -114,9 +130,14 @@ public actor ProviderPoller {
     }
 
     private func refreshAndScheduleDelay() async -> Duration {
-        publish { $0.isRefreshing = true }
+        let credentialed = runtime.hasLocalCredentials()
+        publish {
+            $0.isRefreshing = true
+            $0.hasCredentials = credentialed
+        }
         do {
             let snapshot = try await runtime.refresh()
+            HeadroomLog.polling.info("\(self.runtime.id.rawValue, privacy: .public) refreshed: \(String(describing: snapshot.status), privacy: .public), \(snapshot.windows.count) windows")
             publish {
                 $0.snapshot = snapshot
                 $0.lastError = nil
@@ -125,12 +146,18 @@ public actor ProviderPoller {
             }
             return interval
         } catch {
+            HeadroomLog.polling.error("\(self.runtime.id.rawValue, privacy: .public) failed: \(Self.describe(error), privacy: .public)")
             publish {
                 $0.consecutiveFailures += 1
                 $0.lastError = Self.describe(error)
                 $0.isRefreshing = false
             }
-            return backoff.delay(afterFailures: state.consecutiveFailures)
+            let delay = backoff.delay(afterFailures: state.consecutiveFailures)
+            if case let .rateLimited(hint) = error as? ProviderError {
+                let floor = hint.map { Duration.seconds($0) } ?? Self.rateLimitFloor
+                return max(delay, floor)
+            }
+            return delay
         }
     }
 
@@ -165,6 +192,7 @@ public actor ProviderPoller {
             switch p {
             case let .transient(code?): return "HTTP \(code)"
             case .transient(nil): return "Network unavailable"
+            case .rateLimited: return "Rate limited"
             case let .malformedResponse(msg): return "Malformed response: \(msg)"
             }
         }
