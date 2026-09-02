@@ -1,0 +1,13 @@
+{
+  "billingCycleStart": 1787000000000,
+  "billingCycleEnd": 1789592000000,
+  "enabled": true,
+  "planUsage": {
+    "breakdown": {}
+  },
+  "spendLimitUsage": {
+    "limitType": "team",
+    "pooledLimit": 0,
+    "pooledUsed": 0
+  }
+}

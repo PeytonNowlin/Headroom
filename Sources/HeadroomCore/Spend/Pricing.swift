@@ -1,4 +1,5 @@
 import Foundation
+import Synchronization
 
 /// Per-token USD prices for one model.
 public struct ModelPrice: Sendable, Equatable, Codable {
@@ -24,20 +25,64 @@ public struct ModelPrice: Sendable, Equatable, Codable {
     enum CodingKeys: String, CodingKey { case input = "i", output = "o", cacheWrite = "w", cacheRead = "r" }
 }
 
+/// Maps a vendor-specific slug (Cursor's `claude-4.6-opus-high-thinking`, `composer`) to the
+/// catalog name that carries its price.
+public struct AliasRule: Sendable, Equatable, Codable {
+    public var pattern: String
+    public var canonical: String
+
+    public init(pattern: String, canonical: String) {
+        self.pattern = pattern
+        self.canonical = canonical
+    }
+}
+
 public struct PricingTable: Sendable, Equatable, Codable {
     public var updated: Date?
     public var models: [String: ModelPrice]
+    /// Tried in order before any name-based lookup.
+    public var aliases: [AliasRule]
+    /// `-fast` variants bill the base model's rates times this; unlisted bases stay unpriced.
+    public var fastMultipliers: [String: Double]
 
-    public init(updated: Date? = nil, models: [String: ModelPrice]) {
+    public init(updated: Date? = nil, models: [String: ModelPrice], aliases: [AliasRule] = [], fastMultipliers: [String: Double] = [:]) {
         self.updated = updated
         self.models = models
+        self.aliases = aliases
+        self.fastMultipliers = fastMultipliers
     }
 
-    /// Exact match first, then progressively looser forms: provider prefix stripped, date
-    /// suffix stripped, `-latest` stripped.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        updated = try c.decodeIfPresent(Date.self, forKey: .updated)
+        models = try c.decode([String: ModelPrice].self, forKey: .models)
+        aliases = try c.decodeIfPresent([AliasRule].self, forKey: .aliases) ?? []
+        fastMultipliers = try c.decodeIfPresent([String: Double].self, forKey: .fastMultipliers) ?? [:]
+    }
+
+    /// Alias rules first, then exact match, then progressively looser forms: provider prefix
+    /// stripped, date suffix stripped, `-latest` stripped, and finally `-fast` priced as a multiple.
     public func price(for model: String) -> ModelPrice? {
-        for candidate in Self.candidates(for: model) {
+        let name = canonicalName(for: model) ?? model
+        for candidate in Self.candidates(for: name) {
             if let p = models[candidate] { return p }
+        }
+        if name.hasSuffix("-fast") {
+            let base = String(name.dropLast(5))
+            if let multiplier = fastMultipliers[base] ?? fastMultipliers[Self.candidates(for: base).first { models[$0] != nil } ?? ""],
+               let price = price(for: base) {
+                return ModelPrice(input: price.input * multiplier, output: price.output * multiplier,
+                                  cacheWrite: price.cacheWrite * multiplier, cacheRead: price.cacheRead * multiplier)
+            }
+        }
+        return nil
+    }
+
+    /// The first alias rule matching the whole slug, if any.
+    public func canonicalName(for model: String) -> String? {
+        let trimmed = model.trimmingCharacters(in: .whitespacesAndNewlines)
+        for rule in aliases where AliasRegex.matches(rule.pattern, trimmed) {
+            return rule.canonical
         }
         return nil
     }
@@ -61,19 +106,45 @@ public struct PricingTable: Sendable, Equatable, Codable {
         return out
     }
 
-    /// Entries in `other` win.
+    /// Entries in `other` win; its alias rules are consulted first.
     public func merging(_ other: PricingTable) -> PricingTable {
-        PricingTable(updated: other.updated ?? updated, models: models.merging(other.models) { $1 })
+        PricingTable(updated: other.updated ?? updated,
+                     models: models.merging(other.models) { $1 },
+                     aliases: other.aliases + aliases.filter { rule in !other.aliases.contains(rule) },
+                     fastMultipliers: fastMultipliers.merging(other.fastMultipliers) { $1 })
     }
 
     /// The snapshot compiled into the app, for first launch and offline use.
     public static func bundled() -> PricingTable {
-        guard let url = Bundle.module.url(forResource: "pricing", withExtension: "json"),
-              let data = try? Data(contentsOf: url),
-              let table = try? JSONDecoder.pricing.decode(PricingTable.self, from: data) else {
-            return PricingTable(models: [:])
+        var table = PricingTable(models: [:])
+        if let url = Bundle.module.url(forResource: "pricing", withExtension: "json"),
+           let data = try? Data(contentsOf: url),
+           let decoded = try? JSONDecoder.pricing.decode(PricingTable.self, from: data) {
+            table = decoded
+        }
+        if let url = Bundle.module.url(forResource: "pricing-supplement", withExtension: "json"),
+           let data = try? Data(contentsOf: url),
+           let supplement = try? PricingSource.supplement(data, at: nil) {
+            table = table.merging(supplement)
         }
         return table
+    }
+}
+
+/// Compiled alias patterns, shared across lookups.
+enum AliasRegex {
+    private static let cache = Mutex<[String: NSRegularExpression]>([:])
+
+    static func matches(_ pattern: String, _ text: String) -> Bool {
+        let regex = cache.withLock { cache -> NSRegularExpression? in
+            if let r = cache[pattern] { return r }
+            guard let r = try? NSRegularExpression(pattern: pattern) else { return nil }
+            cache[pattern] = r
+            return r
+        }
+        guard let regex else { return false }
+        let range = NSRange(text.startIndex..., in: text)
+        return regex.firstMatch(in: text, range: range) != nil
     }
 }
 
@@ -130,6 +201,30 @@ public enum PricingSource {
         guard !models.isEmpty else { throw ProviderError.malformedResponse("price list") }
         return PricingTable(updated: now, models: models)
     }
+
+    /// OpenUsage's supplement: prices for models the public catalogs lack (Cursor's `auto`,
+    /// `composer-*`), regex alias rules for vendor slugs, and `-fast` multipliers. Per million.
+    public static let supplementURL = URL(string: "https://robinebers.github.io/openusage/pricing_supplement.json")!
+
+    public static func supplement(_ data: Data, at now: Date?) throws -> PricingTable {
+        let json = try JSON.parse(data)
+        guard let pricing = json["pricing"].object else { throw ProviderError.malformedResponse("pricing supplement") }
+        var models: [String: ModelPrice] = [:]
+        for (name, entry) in pricing {
+            guard let input = entry["input_per_million"].double, let output = entry["output_per_million"].double else { continue }
+            models[name] = ModelPrice(
+                input: input / 1_000_000, output: output / 1_000_000,
+                cacheWrite: (entry["cache_write_per_million"].double ?? input) / 1_000_000,
+                cacheRead: (entry["cache_read_per_million"].double ?? input * 0.1) / 1_000_000
+            )
+        }
+        let aliases = (json["alias_rules"].array ?? []).compactMap { rule -> AliasRule? in
+            guard let pattern = rule["pattern"].string, let canonical = rule["canonical"].string else { return nil }
+            return AliasRule(pattern: pattern, canonical: canonical)
+        }
+        let fast = (json["fast_multipliers"].object ?? [:]).compactMapValues(\.double)
+        return PricingTable(updated: now, models: models, aliases: aliases, fastMultipliers: fast)
+    }
 }
 
 /// Holds the effective price table: bundled snapshot, overlaid with the last successful fetch,
@@ -154,7 +249,7 @@ public actor PricingStore {
         fetched.map { bundled.merging($0) } ?? bundled
     }
 
-    /// Fetches LiteLLM, then overlays models.dev for models LiteLLM lacks.
+    /// Fetches LiteLLM, overlays models.dev for models LiteLLM lacks, then the supplement on top.
     @discardableResult
     public func refreshIfNeeded() async -> PricingTable {
         let now = environment.now()
@@ -170,6 +265,10 @@ public actor PricingStore {
            let t = try? PricingSource.modelsDev(r.body, at: now) {
             // LiteLLM entries win where both know a model.
             table = table.map { t.merging($0) } ?? t
+        }
+        if let r = try? await environment.send(HTTPRequest(url: PricingSource.supplementURL)), r.isSuccess,
+           let t = try? PricingSource.supplement(r.body, at: now) {
+            table = table.map { $0.merging(t) } ?? t
         }
         if let table {
             fetched = table

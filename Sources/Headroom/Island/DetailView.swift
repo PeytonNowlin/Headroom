@@ -116,7 +116,7 @@ struct DetailView: View {
         HStack(spacing: 8) {
             Image(systemName: "exclamationmark.circle")
                 .foregroundStyle(.secondary)
-            Text("Login expired — run `\(provider.signInCommand)` to reconnect")
+            Text(provider.reconnectHint)
                 .font(.system(size: 12))
                 .foregroundStyle(.secondary)
         }

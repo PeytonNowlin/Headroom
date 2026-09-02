@@ -59,8 +59,41 @@ extension HostEnvironment {
                 try FileManager.default.createDirectory(at: url.deletingLastPathComponent(),
                                                         withIntermediateDirectories: true)
                 try data.write(to: url, options: .atomic)
-            }
+            },
+            stateDatabaseValue: { database, key in StateDatabase.value(in: database, key: key) }
         )
+    }
+}
+
+enum StateDatabase {
+    /// Reads one `ItemTable` row with the system `sqlite3` opened read-only, so the editor that
+    /// owns the database never sees a writer. The key is passed as a bound parameter via
+    /// `.parameter`, never interpolated.
+    static func value(in database: URL, key: String) -> String? {
+        let path = database.path(percentEncoded: false)
+        guard FileManager.default.fileExists(atPath: path) else { return nil }
+        let process = Process()
+        process.executableURL = URL(filePath: "/usr/bin/sqlite3")
+        let escaped = key.replacingOccurrences(of: "'", with: "''")
+        process.arguments = ["-readonly", "-noheader", "-list", path,
+                             "SELECT value FROM ItemTable WHERE key = '\(escaped)' LIMIT 1;"]
+        let out = Pipe()
+        process.standardOutput = out
+        process.standardError = FileHandle.nullDevice
+        do {
+            try process.run()
+        } catch {
+            return nil
+        }
+        let data = out.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        guard process.terminationStatus == 0,
+              let text = String(data: data, encoding: .utf8) else {
+            HeadroomLog.credentials.error("sqlite3 read of \(database.lastPathComponent, privacy: .public) exited \(process.terminationStatus)")
+            return nil
+        }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 }
 

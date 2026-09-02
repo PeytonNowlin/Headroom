@@ -8,6 +8,7 @@ final class TestWorld: Sendable {
     struct State {
         var files: [String: Data] = [:]
         var keychain: [String: Data] = [:]
+        var stateDatabases: [String: [String: String]] = [:]
         var env: [String: String] = [:]
         var responses: [String: [HTTPResponse]] = [:]
         var fallbackResponse: HTTPResponse?
@@ -55,6 +56,12 @@ final class TestWorld: Sendable {
 
     func env(_ key: String, _ value: String) {
         state.withLock { $0.env[key] = value }
+    }
+
+    /// A row in an editor state database (path relative to home).
+    func stateValue(_ database: String, _ key: String, _ value: String) {
+        let path = home.appending(path: database).path(percentEncoded: false)
+        state.withLock { $0.stateDatabases[path, default: [:]][key] = value }
     }
 
     /// Queue a response for a URL; responses are consumed in order, the last one repeating.
@@ -154,6 +161,10 @@ final class TestWorld: Sendable {
             },
             writeFile: { url, data in
                 world.state.withLock { $0.files[url.path(percentEncoded: false)] = data }
+            },
+            stateDatabaseValue: { database, key in
+                let path = database.path(percentEncoded: false)
+                return world.state.withLock { $0.stateDatabases[path]?[key] }
             }
         )
     }

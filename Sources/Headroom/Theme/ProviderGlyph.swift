@@ -43,6 +43,20 @@ struct ProviderGlyph: View {
             p.addLine(to: CGPoint(x: r.minX + r.width * 0.2, y: r.maxY - r.height * 0.15))
             p.move(to: CGPoint(x: r.minX + r.width * 0.2, y: r.minY + r.height * 0.15))
             p.addLine(to: CGPoint(x: r.minX + r.width * 0.45, y: r.minY + r.height * 0.42))
+        case .cursor:
+            // Isometric cube outline with the front edge, a nod to the pointer-cube mark.
+            let w = r.width, h = r.height
+            let top = CGPoint(x: c.x, y: r.minY + h * 0.08)
+            let left = CGPoint(x: r.minX + w * 0.12, y: r.minY + h * 0.3)
+            let right = CGPoint(x: r.maxX - w * 0.12, y: r.minY + h * 0.3)
+            let bottomLeft = CGPoint(x: left.x, y: r.maxY - h * 0.3)
+            let bottomRight = CGPoint(x: right.x, y: r.maxY - h * 0.3)
+            let bottom = CGPoint(x: c.x, y: r.maxY - h * 0.08)
+            let mid = CGPoint(x: c.x, y: r.minY + h * 0.52)
+            p.move(to: top); p.addLine(to: right); p.addLine(to: bottomRight); p.addLine(to: bottom)
+            p.addLine(to: bottomLeft); p.addLine(to: left); p.closeSubpath()
+            p.move(to: left); p.addLine(to: mid); p.addLine(to: right)
+            p.move(to: mid); p.addLine(to: bottom)
         }
         return p
     }

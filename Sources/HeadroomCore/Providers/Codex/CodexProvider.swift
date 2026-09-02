@@ -169,15 +169,18 @@ enum CodexUsageMapper {
 /// issuer would reject anyway.
 enum JWT {
     static func expiry(of token: String) -> Date? {
+        guard let exp = claims(of: token)?["exp"].double else { return nil }
+        return Date(timeIntervalSince1970: exp)
+    }
+
+    static func claims(of token: String) -> JSON? {
         let parts = token.split(separator: ".")
         guard parts.count == 3 else { return nil }
         var payload = String(parts[1])
             .replacingOccurrences(of: "-", with: "+")
             .replacingOccurrences(of: "_", with: "/")
         while payload.count % 4 != 0 { payload += "=" }
-        guard let data = Data(base64Encoded: payload),
-              let json = try? JSON.parse(data),
-              let exp = json["exp"].double else { return nil }
-        return Date(timeIntervalSince1970: exp)
+        guard let data = Data(base64Encoded: payload) else { return nil }
+        return try? JSON.parse(data)
     }
 }

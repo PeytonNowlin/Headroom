@@ -20,6 +20,7 @@ final class UsageModel {
     let preferences: Preferences
     private var pollers: [ProviderID: ProviderPoller] = [:]
     private var scanners: [ProviderID: SpendScanner] = [:]
+    private let cursorSpend: CursorSpendSource
     private let pricing: PricingStore
     private var tasks: [Task<Void, Never>] = []
     static let spendInterval: Duration = .seconds(120)
@@ -28,11 +29,13 @@ final class UsageModel {
         self.environment = environment
         self.preferences = preferences
         pricing = PricingStore(environment: environment)
+        cursorSpend = CursorSpendSource(environment: environment)
         alertLedger = Self.loadLedger(environment)
         let runtimes: [any ProviderRuntime] = [
             ClaudeProvider(environment: environment),
             CodexProvider(environment: environment),
             GrokProvider(environment: environment),
+            CursorProvider(environment: environment),
         ]
         let formats: [any UsageLogFormat] = [ClaudeLogFormat(), CodexLogFormat(), GrokLogFormat()]
         for format in formats {
@@ -98,12 +101,20 @@ final class UsageModel {
             let ledger = await scanner.scan()
             spend[id] = SpendSummarizer.summarize(ledger, pricing: table, now: environment.now(), calendar: calendar)
         }
+        if let ledger = await cursorSpend.ledger() {
+            spend[.cursor] = SpendSummarizer.summarize(ledger, pricing: table, now: environment.now(), calendar: calendar)
+        }
     }
 
-    /// Sum across every provider with logs. Nil until all of them have reported at least once, so
+    /// Providers whose spend we expect to be able to report: local logs, or a Cursor login.
+    private var spendProviders: [ProviderID] {
+        scanners.filter { $0.value.hasLogs() }.map(\.key) + (cursorSpend.hasCredentials() ? [.cursor] : [])
+    }
+
+    /// Sum across every provider with spend. Nil until all of them have reported at least once, so
     /// a first-launch scan still in progress never shows a partial number as the total.
     var totalSpend: SpendSummary? {
-        let expected = scanners.filter { $0.value.hasLogs() }.map(\.key)
+        let expected = spendProviders
         guard !expected.isEmpty, expected.allSatisfy({ spend[$0] != nil }) else { return nil }
         let all = expected.compactMap { spend[$0] }
         guard let first = all.first else { return nil }

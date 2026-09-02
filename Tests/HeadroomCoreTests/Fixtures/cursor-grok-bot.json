@@ -1,0 +1,9 @@
+{
+  "hasAvailableUsage": true,
+  "hasNonZeroIncludedLimit": true,
+  "usagePercent": 37.5,
+  "currentPeriodStart": "2026-08-31T00:00:00Z",
+  "nextResetTimestampUtc": "2026-09-07T00:00:00Z",
+  "usesPooledEnterpriseAllowance": false,
+  "includedLimitZero": false
+}

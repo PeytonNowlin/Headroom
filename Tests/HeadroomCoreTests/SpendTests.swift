@@ -131,15 +131,21 @@ struct PricingTests {
         let world = TestWorld(now: now)
         world.respond(PricingSource.liteLLMURL.absoluteString, json: #"{"claude-opus-5":{"input_cost_per_token":0.000009,"output_cost_per_token":0.000025,"litellm_provider":"anthropic"}}"#)
         world.respond(PricingSource.modelsDevURL.absoluteString, status: 500, json: "{}")
+        world.respond(PricingSource.supplementURL.absoluteString, json: #"{"pricing":{"composer-9":{"input_per_million":1,"output_per_million":4}},"alias_rules":[{"pattern":"^composer$","canonical":"composer-9"}],"fast_multipliers":{"composer-9":2}}"#)
         let bundled = PricingTable(models: ["claude-opus-5": ModelPrice(input: 1, output: 1), "other": ModelPrice(input: 2, output: 2)])
         let store = PricingStore(environment: world.environment, bundled: bundled)
         let table = await store.refreshIfNeeded()
         #expect(table.price(for: "claude-opus-5")?.input == 0.000009)
         #expect(table.price(for: "other")?.input == 2)
+        // Supplement: per-million prices, alias rules, fast multipliers, and cache defaults.
+        let composer = try #require(table.price(for: "composer"))
+        #expect(composer.input == 1e-6 && composer.output == 4e-6 && composer.cacheWrite == 1e-6)
+        #expect(abs(composer.cacheRead - 0.1e-6) < 1e-15)
+        #expect(table.price(for: "composer-9-fast")?.output == 8e-6)
 
         // Within the hour, no second fetch.
         _ = await store.refreshIfNeeded()
-        #expect(world.requests.count == 2)
+        #expect(world.requests.count == 3)
         #expect(world.fileContents("Library/Application Support/Headroom/pricing-cache.json") != nil)
     }
 }

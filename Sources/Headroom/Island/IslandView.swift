@@ -99,7 +99,7 @@ struct IslandView: View {
                 VStack(spacing: 8) {
                     Text("Headroom")
                         .font(.system(size: 15, weight: .semibold, design: .rounded))
-                    Text("No AI CLI logins found — sign in with `claude`, `codex`, or `grok` and the ring appears within a few minutes.")
+                    Text("No AI logins found — sign in with `claude`, `codex`, `grok`, or the Cursor app and the ring appears within a few minutes.")
                         .font(.system(size: 11.5))
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)

@@ -22,6 +22,8 @@ public struct HostEnvironment: Sendable {
     public var writeFile: @Sendable (URL, Data) throws -> Void
     /// Headroom's own cache/preferences directory (Application Support/Headroom).
     public var dataDirectory: URL
+    /// One value from a VS Code-style `ItemTable` state database, opened read-only.
+    public var stateDatabaseValue: @Sendable (_ database: URL, _ key: String) -> String?
 
     public init(
         home: URL,
@@ -37,7 +39,8 @@ public struct HostEnvironment: Sendable {
         fileInfo: @escaping @Sendable (URL) -> FileInfo? = { _ in nil },
         readFileRange: @escaping @Sendable (URL, Int) throws -> Data = { _, _ in Data() },
         writeFile: @escaping @Sendable (URL, Data) throws -> Void = { _, _ in },
-        dataDirectory: URL? = nil
+        dataDirectory: URL? = nil,
+        stateDatabaseValue: @escaping @Sendable (URL, String) -> String? = { _, _ in nil }
     ) {
         self.home = home
         self.timeZone = timeZone
@@ -53,6 +56,7 @@ public struct HostEnvironment: Sendable {
         self.readFileRange = readFileRange
         self.writeFile = writeFile
         self.dataDirectory = dataDirectory ?? home.appending(path: "Library/Application Support/Headroom")
+        self.stateDatabaseValue = stateDatabaseValue
     }
 
     public var calendar: Calendar {

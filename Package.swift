@@ -10,7 +10,7 @@ let package = Package(
     targets: [
         .target(
             name: "HeadroomCore",
-            resources: [.copy("Resources/pricing.json")],
+            resources: [.copy("Resources/pricing.json"), .copy("Resources/pricing-supplement.json")],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
         .executableTarget(

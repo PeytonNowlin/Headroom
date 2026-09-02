@@ -4,6 +4,7 @@ public enum ProviderID: String, Codable, CaseIterable, Sendable, Hashable, Ident
     case claude
     case codex
     case grok
+    case cursor
 
     public var id: String { rawValue }
 
@@ -12,6 +13,7 @@ public enum ProviderID: String, Codable, CaseIterable, Sendable, Hashable, Ident
         case .claude: "Claude"
         case .codex: "Codex"
         case .grok: "Grok"
+        case .cursor: "Cursor"
         }
     }
 
@@ -21,6 +23,15 @@ public enum ProviderID: String, Codable, CaseIterable, Sendable, Hashable, Ident
         case .claude: "claude"
         case .codex: "codex"
         case .grok: "grok"
+        case .cursor: "agent login"
+        }
+    }
+
+    /// How the user reconnects, in a sentence.
+    public var reconnectHint: String {
+        switch self {
+        case .cursor: "Login expired — sign in to the Cursor app (or run `agent login`)"
+        default: "Login expired — run `\(signInCommand)` to reconnect"
         }
     }
 }

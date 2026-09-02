@@ -1,6 +1,6 @@
 # Headroom
 
-A quota island for your MacBook notch. Headroom shows how much headroom you have left on Claude, Codex, and Grok — as tiny dots beside the notch, as draining rings when you hover, and as full quota windows, reset countdowns, and local spend when you click in.
+A quota island for your MacBook notch. Headroom shows how much headroom you have left on Claude, Codex, Grok, and Cursor — as tiny dots beside the notch, as draining rings when you hover, and as full quota windows, reset countdowns, and local spend when you click in.
 
 - **Compact**: one dot per signed-in CLI, coloured by urgency (green → yellow → orange → red).
 - **Hover**: rings per provider showing percent remaining on the tightest window, plus a spend footer (today / yesterday / 30 days, cost and tokens).
@@ -13,7 +13,7 @@ Headroom reads the same credentials your CLIs already use and the same session l
 
 - macOS 26 (Tahoe) or later, Apple silicon.
 - Works on any display: with a notch the island wraps it; without one it becomes a floating pill under the menu bar.
-- At least one of the [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Codex](https://github.com/openai/codex), or [Grok](https://x.ai) CLIs signed in.
+- At least one of the [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Codex](https://github.com/openai/codex), or [Grok](https://x.ai) CLIs signed in, or the [Cursor](https://cursor.com) app.
 
 ## Install
 
@@ -38,8 +38,8 @@ Providers refresh every 5 minutes; the countdown in the island's corner shows wh
 
 ## Privacy
 
-- Credentials are read from where the CLIs keep them (Keychain for Claude, `~/.codex/auth.json`, `~/.grok/auth.json`) and are only ever used to call each vendor's own usage endpoint. Headroom never writes credentials and never refreshes tokens.
-- Spend is computed locally from session logs (`~/.claude/projects`, `~/.codex/sessions`, `~/.grok/sessions`). Nothing leaves your machine except the usage calls above and a daily fetch of public model pricing from LiteLLM.
+- Credentials are read from where the CLIs keep them (Keychain for Claude, `~/.codex/auth.json`, `~/.grok/auth.json`, Cursor's state database opened read-only) and are only ever used to call each vendor's own usage endpoint. Headroom never writes credentials and never refreshes tokens.
+- Spend is computed locally from session logs (`~/.claude/projects`, `~/.codex/sessions`, `~/.grok/sessions`). Cursor has no local log, so its last 30 days are fetched from your own Cursor dashboard export and priced locally. Nothing else leaves your machine except an hourly fetch of public model pricing (LiteLLM, models.dev, and OpenUsage's supplement).
 - No analytics, no crash reporting, no accounts.
 
 ## Build from source

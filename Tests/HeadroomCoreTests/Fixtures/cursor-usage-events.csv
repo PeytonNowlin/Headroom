@@ -1,0 +1,8 @@
+Date,Model,Max Mode,Input (w/ Cache Write),Input (w/o Cache Write),Cache Read,Output Tokens,Cost
+2026-08-31T23:30:00.000Z,claude-4.6-opus-high-thinking,No,"1,200",300,"8,000",450,$0.12
+2026-09-01T02:15:00.000Z,composer,No,5000,1000,20000,900,Included
+2026-09-01T14:00:00.000Z,gpt-5.5-high-fast,No,2000,,4000,600,$0.05
+2026-09-01T15:00:00.000Z,"Composer 2.5 (Auto, 1 request)",No,100,0,0,10,Included
+2026-09-01T16:00:00.000Z,mystery-model-9,No,10,10,10,10,$0.00
+2026-09-01T17:00:00.000Z,composer,No,1.5,0,0,0,$0.00
+2026-09-01T18:00:00.000Z,composer,No,-5,0,0,0,$0.00
