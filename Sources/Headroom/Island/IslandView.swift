@@ -7,13 +7,14 @@ import SwiftUI
 struct IslandView: View {
     @Bindable var state: IslandState
     var model: UsageModel
+    var onSelect: (ProviderID?) -> Void = { _ in }
 
     private var shape: IslandShape {
         IslandShape(cornerRadius: state.layout.cornerRadius, flare: state.layout.flare)
     }
 
     private var size: CGSize {
-        let s = state.layout.size(for: state.mode)
+        let s = state.currentSize
         return CGSize(width: s.width + state.layout.flare * 2, height: s.height)
     }
 
@@ -36,6 +37,7 @@ struct IslandView: View {
         .clipShape(shape)
         .frame(width: state.layout.panel.width, height: state.layout.panel.height, alignment: .top)
         .animation(Motion.island, value: state.mode)
+        .animation(Motion.island, value: state.detailHeight)
     }
 
     @ViewBuilder
@@ -45,6 +47,9 @@ struct IslandView: View {
             compactContent
         case .expanded:
             expandedContent
+                .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .top)))
+        case let .detail(id):
+            detailContent(id)
                 .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .top)))
         }
     }
@@ -59,7 +64,7 @@ struct IslandView: View {
                 ForEach(providers.prefix(split)) { dot($0) }
             }
             .frame(maxWidth: .infinity, alignment: .trailing)
-            Color.clear.frame(width: notchWidth)
+            Color.clear.frame(width: state.layout.anchor.notchWidth)
             HStack(spacing: 6) {
                 ForEach(providers.dropFirst(split)) { dot($0) }
             }
@@ -78,9 +83,7 @@ struct IslandView: View {
 
     private var expandedContent: some View {
         VStack(spacing: 0) {
-            if state.layout.anchor.isNotch {
-                Color.clear.frame(height: notchHeight)
-            }
+            notchSpacer
             let providers = model.visibleProviders
             if providers.isEmpty {
                 VStack(spacing: 6) {
@@ -94,12 +97,18 @@ struct IslandView: View {
             } else {
                 HStack(alignment: .top, spacing: 28) {
                     ForEach(providers) { id in
-                        VStack(spacing: 6) {
-                            RingView(provider: id, state: model.state(id), status: model.status(id))
-                            Text(id.displayName)
-                                .font(.system(size: 11, weight: .medium))
-                                .foregroundStyle(.secondary)
+                        Button {
+                            onSelect(id)
+                        } label: {
+                            VStack(spacing: 6) {
+                                RingView(provider: id, state: model.state(id), status: model.status(id))
+                                Text(id.displayName)
+                                    .font(.system(size: 11, weight: .medium))
+                                    .foregroundStyle(.secondary)
+                            }
+                            .contentShape(Rectangle())
                         }
+                        .buttonStyle(LiftButtonStyle())
                     }
                 }
                 .padding(.top, 18)
@@ -107,16 +116,46 @@ struct IslandView: View {
             Spacer(minLength: 0)
         }
         .padding(.bottom, 14)
-        .frame(width: state.layout.expanded.width, height: state.layout.expanded.height)
+        .frame(width: state.layout.expandedWidth, height: state.layout.expandedHeight)
     }
 
-    private var notchHeight: CGFloat {
-        if case let .notch(_, height) = state.layout.anchor { return height }
-        return 0
+    // MARK: - Detail
+
+    private func detailContent(_ id: ProviderID) -> some View {
+        VStack(spacing: 0) {
+            notchSpacer
+            DetailView(
+                provider: id,
+                state: model.state(id),
+                status: model.status(id),
+                now: model.now,
+                onBack: { onSelect(nil) }
+            )
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
+                state.detailHeight = height + state.layout.anchor.notchHeight
+            }
+        }
+        .frame(width: state.layout.expandedWidth, alignment: .top)
+        .frame(height: state.currentSize.height, alignment: .top)
     }
 
-    private var notchWidth: CGFloat {
-        if case let .notch(width, _) = state.layout.anchor { return width }
-        return 0
+    @ViewBuilder
+    private var notchSpacer: some View {
+        if state.layout.anchor.isNotch {
+            Color.clear.frame(height: state.layout.anchor.notchHeight)
+        }
+    }
+}
+
+/// Tokenly's hover lift / press squash.
+struct LiftButtonStyle: ButtonStyle {
+    @State private var hovering = false
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.94 : (hovering ? 1.08 : 1))
+            .animation(Motion.lift, value: configuration.isPressed)
+            .animation(Motion.lift, value: hovering)
+            .onHover { hovering = $0 }
     }
 }

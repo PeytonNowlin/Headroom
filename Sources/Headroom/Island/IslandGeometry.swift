@@ -1,4 +1,5 @@
 import AppKit
+import HeadroomCore
 
 /// Where the island hangs from on the current main display.
 enum IslandAnchor: Equatable {
@@ -11,27 +12,55 @@ enum IslandAnchor: Equatable {
         if case .notch = self { return true }
         return false
     }
+
+    var notchHeight: CGFloat {
+        if case let .notch(_, height) = self { return height }
+        return 0
+    }
+
+    var notchWidth: CGFloat {
+        if case let .notch(width, _) = self { return width }
+        return 0
+    }
 }
 
-/// Fixed dimensions of the island in each mode, derived from the anchor.
+enum IslandMode: Equatable {
+    case compact
+    case expanded
+    case detail(ProviderID)
+
+    var isCompact: Bool { self == .compact }
+
+    var detailProvider: ProviderID? {
+        if case let .detail(id) = self { return id }
+        return nil
+    }
+}
+
+/// Fixed dimensions of the island, derived from the anchor. Detail height is content-driven
+/// and supplied by the state.
 struct IslandLayout: Equatable {
     var anchor: IslandAnchor
     var compact: CGSize
-    var expanded: CGSize
+    var expandedWidth: CGFloat
+    var expandedHeight: CGFloat
     /// Horizontal distance the top corners flare outward to meet the bezel.
     var flare: CGFloat
     var cornerRadius: CGFloat
-    /// Total panel size: the union of every mode so the panel never needs to resize.
-    var panel: CGSize { CGSize(width: expanded.width + flare * 2, height: expanded.height) }
 
-    func size(for mode: IslandMode) -> CGSize {
+    /// Tallest the island can ever be; the panel is sized to this so it never resizes.
+    static let maxHeight: CGFloat = 480
+
+    /// Total panel size: the union of every mode.
+    var panel: CGSize { CGSize(width: expandedWidth + flare * 2, height: Self.maxHeight) }
+
+    func size(for mode: IslandMode, detailHeight: CGFloat) -> CGSize {
         switch mode {
         case .compact: compact
-        case .expanded: expanded
+        case .expanded: CGSize(width: expandedWidth, height: expandedHeight)
+        case .detail: CGSize(width: expandedWidth, height: min(detailHeight, Self.maxHeight))
         }
     }
-
-    static let expandedSize = CGSize(width: 360, height: 176)
 
     static func make(for anchor: IslandAnchor) -> IslandLayout {
         switch anchor {
@@ -39,7 +68,8 @@ struct IslandLayout: Equatable {
             return IslandLayout(
                 anchor: anchor,
                 compact: CGSize(width: width + 2 * 46, height: height),
-                expanded: CGSize(width: max(expandedSize.width, width + 2 * 46), height: expandedSize.height),
+                expandedWidth: max(360, width + 2 * 46),
+                expandedHeight: 176,
                 flare: 12,
                 cornerRadius: 14
             )
@@ -47,17 +77,13 @@ struct IslandLayout: Equatable {
             return IslandLayout(
                 anchor: anchor,
                 compact: CGSize(width: 132, height: 30),
-                expanded: expandedSize,
+                expandedWidth: 360,
+                expandedHeight: 176 - 33,
                 flare: 0,
                 cornerRadius: 15
             )
         }
     }
-}
-
-enum IslandMode: Equatable {
-    case compact
-    case expanded
 }
 
 enum IslandGeometry {
@@ -88,10 +114,10 @@ enum IslandGeometry {
         return CGRect(x: x, y: top - size.height, width: size.width, height: size.height)
     }
 
-    /// The island's rect inside the panel for a given mode, in a top-left-origin coordinate space.
-    static func islandRect(layout: IslandLayout, mode: IslandMode) -> CGRect {
-        let size = layout.size(for: mode)
+    /// The island's rect inside the panel, in a top-left-origin coordinate space.
+    static func islandRect(layout: IslandLayout, size: CGSize) -> CGRect {
         let panel = layout.panel
-        return CGRect(x: (panel.width - size.width) / 2, y: 0, width: size.width, height: size.height)
+        let width = size.width + layout.flare * 2
+        return CGRect(x: (panel.width - width) / 2, y: 0, width: width, height: size.height)
     }
 }

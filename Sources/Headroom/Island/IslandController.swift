@@ -1,4 +1,5 @@
 import AppKit
+import HeadroomCore
 import SwiftUI
 
 /// Owns the island panel, its state machine, and screen anchoring.
@@ -22,8 +23,11 @@ final class IslandController {
         guard let screen = NSScreen.main ?? NSScreen.screens.first else { return }
         let frame = IslandGeometry.panelFrame(layout: state.layout, on: screen)
         let panel = IslandPanel(frame: frame)
-        let host = IslandHostView(layout: state.layout, rootView: IslandView(state: state, model: model))
-        host.currentMode = { [state] in state.mode }
+        let root = IslandView(state: state, model: model) { [weak self] id in
+            self?.select(id)
+        }
+        let host = IslandHostView(layout: state.layout, rootView: root)
+        host.currentSize = { [state] in state.currentSize }
         host.onHoverChange = { [weak self] hovering in self?.hoverChanged(hovering) }
         host.onRightClick = { [weak self] event in self?.showContextMenu(for: event) }
         panel.contentView = host
@@ -40,7 +44,7 @@ final class IslandController {
         }
     }
 
-    // MARK: - Hover state machine
+    // MARK: - State machine
 
     private func hoverChanged(_ hovering: Bool) {
         dwellTask?.cancel()
@@ -53,6 +57,14 @@ final class IslandController {
             }
         } else {
             setMode(.compact)
+        }
+    }
+
+    private func select(_ id: ProviderID?) {
+        if let id {
+            setMode(.detail(id))
+        } else {
+            setMode(.expanded)
         }
     }
 

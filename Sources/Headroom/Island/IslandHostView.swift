@@ -1,17 +1,17 @@
 import AppKit
 import SwiftUI
 
-/// Hosts the SwiftUI island and owns all mouse input. Hover and hit-testing are clipped to the
-/// island silhouette for the current mode, so the transparent margins of the panel are inert.
+/// Hosts the SwiftUI island and owns hover tracking. Hit-testing is clipped to the island
+/// silhouette for the current mode, so the transparent margins of the panel are inert; inside
+/// the silhouette, SwiftUI receives clicks normally and unhandled ones bubble up here.
 @MainActor
 final class IslandHostView: NSView {
     private let hosting: NSHostingView<IslandView>
     private var trackingArea: NSTrackingArea?
 
     var layout: IslandLayout
-    var currentMode: () -> IslandMode = { .compact }
+    var currentSize: () -> CGSize = { .zero }
     var onHoverChange: (Bool) -> Void = { _ in }
-    var onClick: (CGPoint) -> Void = { _ in }
     var onRightClick: (NSEvent) -> Void = { _ in }
 
     private var hovering = false {
@@ -35,11 +35,6 @@ final class IslandHostView: NSView {
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError() }
 
-    var rootView: IslandView {
-        get { hosting.rootView }
-        set { hosting.rootView = newValue }
-    }
-
     override var isFlipped: Bool { true }
 
     override func updateTrackingAreas() {
@@ -56,7 +51,7 @@ final class IslandHostView: NSView {
     }
 
     private func islandContains(_ point: CGPoint) -> Bool {
-        let rect = IslandGeometry.islandRect(layout: layout, mode: currentMode())
+        let rect = IslandGeometry.islandRect(layout: layout, size: currentSize())
         guard rect.contains(point) else { return false }
         let shape = IslandShape(cornerRadius: layout.cornerRadius, flare: layout.flare)
         return shape.path(in: rect).contains(point)
@@ -64,7 +59,8 @@ final class IslandHostView: NSView {
 
     override func hitTest(_ point: NSPoint) -> NSView? {
         let local = convert(point, from: superview)
-        return islandContains(local) ? self : nil
+        guard islandContains(local) else { return nil }
+        return hosting.hitTest(local) ?? self
     }
 
     override func mouseEntered(with event: NSEvent) {
@@ -79,12 +75,6 @@ final class IslandHostView: NSView {
         hovering = false
     }
 
-    override func mouseDown(with event: NSEvent) {
-        let local = convert(event.locationInWindow, from: nil)
-        guard islandContains(local) else { return }
-        onClick(local)
-    }
-
     override func rightMouseDown(with event: NSEvent) {
         let local = convert(event.locationInWindow, from: nil)
         guard islandContains(local) else { return }
@@ -94,8 +84,7 @@ final class IslandHostView: NSView {
     /// Re-evaluate hover after the island changes size under a stationary cursor.
     func refreshHover() {
         guard let window else { return }
-        let screenPoint = NSEvent.mouseLocation
-        let windowPoint = window.convertPoint(fromScreen: screenPoint)
+        let windowPoint = window.convertPoint(fromScreen: NSEvent.mouseLocation)
         hovering = islandContains(convert(windowPoint, from: nil))
     }
 }
