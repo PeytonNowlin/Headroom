@@ -25,7 +25,7 @@ final class Preferences {
     private struct Stored: Codable {
         var visibility: [ProviderID: ProviderVisibility] = [:]
         var order: [ProviderID] = ProviderID.allCases
-        var hideInFullScreen = true
+        var hideInFullScreen = false
         var showMenuBarIcon = false
         var didRegisterLoginItem = false
         var didCompleteFirstRun = false
