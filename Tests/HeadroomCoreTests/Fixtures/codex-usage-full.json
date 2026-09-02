@@ -1,0 +1,42 @@
+{
+  "user_id": "user-REDACTED",
+  "account_id": "00000000-0000-0000-0000-000000000000",
+  "email": "redacted@example.com",
+  "plan_type": "pro",
+  "rate_limit": {
+    "allowed": true,
+    "limit_reached": false,
+    "primary_window": {
+      "used_percent": 34,
+      "limit_window_seconds": 18000,
+      "reset_after_seconds": 9000,
+      "reset_at": 1788309000
+    },
+    "secondary_window": {
+      "used_percent": 72,
+      "limit_window_seconds": 604800,
+      "reset_after_seconds": 300000,
+      "reset_at": 1788600000
+    }
+  },
+  "additional_rate_limits": [
+    {
+      "limit_name": "gpt-5.3-codex-spark",
+      "rate_limit": {
+        "allowed": true,
+        "limit_reached": false,
+        "primary_window": { "used_percent": 10, "limit_window_seconds": 18000, "reset_after_seconds": 9000, "reset_at": 1788309000 },
+        "secondary_window": { "used_percent": 55, "limit_window_seconds": 604800, "reset_after_seconds": 300000, "reset_at": 1788600000 }
+      }
+    }
+  ],
+  "credits": {
+    "has_credits": true,
+    "unlimited": false,
+    "overage_limit_reached": false,
+    "balance": "31.84",
+    "approx_local_messages": null,
+    "approx_cloud_messages": null
+  },
+  "rate_limit_reset_credits": { "available_count": 1, "applicable_available_count": 1 }
+}

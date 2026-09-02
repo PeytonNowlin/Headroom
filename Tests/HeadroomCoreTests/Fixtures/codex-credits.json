@@ -1,0 +1,10 @@
+{
+  "credits": [
+    { "id": "rc_1", "expires_at": 1789000000 },
+    { "id": "rc_2", "expires_at": 1789500000 }
+  ],
+  "available_count": 2,
+  "total_earned_count": 3,
+  "immediate_reset_purchase_eligible": false,
+  "history_enabled": false
+}

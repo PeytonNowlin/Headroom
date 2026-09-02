@@ -1,0 +1,32 @@
+{
+  "user_id": "user-REDACTED",
+  "account_id": "00000000-0000-0000-0000-000000000000",
+  "email": "redacted@example.com",
+  "plan_type": "self_serve_business_prolite",
+  "rate_limit": {
+    "allowed": true,
+    "limit_reached": false,
+    "primary_window": {
+      "used_percent": 1,
+      "limit_window_seconds": 604800,
+      "reset_after_seconds": 470270,
+      "reset_at": 1788783772
+    },
+    "secondary_window": null
+  },
+  "code_review_rate_limit": null,
+  "additional_rate_limits": null,
+  "model_usage": {},
+  "credits": {
+    "has_credits": true,
+    "unlimited": false,
+    "overage_limit_reached": false,
+    "balance": null,
+    "approx_local_messages": null,
+    "approx_cloud_messages": null
+  },
+  "spend_control": { "reached": false, "individual_limit": null },
+  "rate_limit_reached_type": null,
+  "promo": null,
+  "rate_limit_reset_credits": { "available_count": 0, "applicable_available_count": 0 }
+}
