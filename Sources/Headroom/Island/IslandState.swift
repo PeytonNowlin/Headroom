@@ -7,6 +7,8 @@ import SwiftUI
 final class IslandState {
     var mode: IslandMode = .compact
     var layout: IslandLayout
+    /// Pinned: stays open when the cursor leaves; cleared by click, hotkey, or clicking outside.
+    var pinned = false
     /// Measured height of the detail content; drives the island size in `.detail`.
     var detailHeight: CGFloat = 300
 

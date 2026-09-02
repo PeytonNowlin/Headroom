@@ -120,6 +120,17 @@ struct IslandView: View {
             }
         }
         .padding(.bottom, 12)
+        .overlay(alignment: .topTrailing) {
+            if state.pinned {
+                Image(systemName: "pin.fill")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(.tertiary)
+                    .rotationEffect(.degrees(45))
+                    .padding(.top, state.layout.anchor.notchHeight + 8)
+                    .padding(.trailing, 12)
+                    .transition(.opacity)
+            }
+        }
         .frame(width: state.layout.expandedWidth, height: state.layout.expandedHeight)
     }
 

@@ -13,6 +13,8 @@ final class IslandHostView: NSView {
     var currentSize: () -> CGSize = { .zero }
     var onHoverChange: (Bool) -> Void = { _ in }
     var onRightClick: (NSEvent) -> Void = { _ in }
+    /// A left click inside the silhouette that no SwiftUI control consumed.
+    var onBackgroundClick: () -> Void = {}
 
     private var hovering = false {
         didSet { if hovering != oldValue { onHoverChange(hovering) } }
@@ -73,6 +75,12 @@ final class IslandHostView: NSView {
 
     override func mouseExited(with event: NSEvent) {
         hovering = false
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        let local = convert(event.locationInWindow, from: nil)
+        guard islandContains(local) else { return }
+        onBackgroundClick()
     }
 
     override func rightMouseDown(with event: NSEvent) {
