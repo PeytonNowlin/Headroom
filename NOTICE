@@ -1,0 +1,15 @@
+Headroom
+
+Portions of this software are derived from the following MIT-licensed projects:
+
+OpenUsage — https://github.com/robinebers/openusage
+Copyright (c) Robin Ebers
+Provider credential discovery, usage-API mapping, and local session-log spend
+parsing for Claude, Codex, and Grok are ported from OpenUsage.
+
+Tokenly — https://github.com/itsSwanks/tokenly
+Copyright (c) itsSwanks
+The Liquid Glass visual language, urgency color scale, ring gauge, floating
+non-activating panel technique, and callout layout are ported from Tokenly.
+
+Both projects are licensed under the MIT License; see LICENSE for the text.
