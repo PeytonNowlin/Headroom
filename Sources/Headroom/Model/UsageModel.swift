@@ -53,8 +53,9 @@ final class UsageModel {
                                         initialSnapshot: entry?.snapshot,
                                         rateLimitedUntil: entry?.rateLimitedUntil)
             pollers[runtime.id] = poller
+            // Mirrors the poller's seed; the first poll corrects it off the main thread.
             states[runtime.id] = ProviderState(provider: runtime.id, snapshot: entry?.snapshot,
-                                               hasCredentials: runtime.hasLocalCredentials(),
+                                               hasCredentials: entry?.snapshot.map { $0.status != .absent } ?? false,
                                                rateLimitedUntil: entry?.rateLimitedUntil)
             tasks.append(Task { [weak self] in
                 for await state in poller.states {

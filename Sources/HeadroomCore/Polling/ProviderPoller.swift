@@ -102,8 +102,11 @@ public actor ProviderPoller {
         self.environment = environment
         self.interval = interval
         self.backoff = backoff
+        // Seed credentials from the restored snapshot rather than probing: probing shells out for
+        // some providers (sqlite3, security) and the init runs on the caller's thread. The first
+        // refresh publishes the real answer before it makes any request.
         self.state = ProviderState(provider: runtime.id, snapshot: initialSnapshot,
-                                   hasCredentials: runtime.hasLocalCredentials(),
+                                   hasCredentials: initialSnapshot.map { $0.status != .absent } ?? false,
                                    rateLimitedUntil: rateLimitedUntil)
         var cont: AsyncStream<ProviderState>.Continuation?
         self.states = AsyncStream(bufferingPolicy: .bufferingNewest(8)) { cont = $0 }
