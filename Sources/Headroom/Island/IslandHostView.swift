@@ -24,6 +24,12 @@ final class IslandHostView: NSView {
         self.layout = layout
         hosting = NSHostingView(rootView: rootView)
         super.init(frame: CGRect(origin: .zero, size: layout.panel))
+        wantsLayer = true
+        layer?.backgroundColor = .clear
+        layer?.isOpaque = false
+        hosting.wantsLayer = true
+        hosting.layer?.backgroundColor = .clear
+        hosting.layer?.isOpaque = false
         hosting.translatesAutoresizingMaskIntoConstraints = false
         addSubview(hosting)
         NSLayoutConstraint.activate([

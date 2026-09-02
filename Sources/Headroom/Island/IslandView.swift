@@ -25,12 +25,16 @@ struct IslandView: View {
 
     var body: some View {
         ZStack(alignment: .top) {
-            shape
-                .fill(.black)
-                .opacity(isBlackCompact ? 1 : 0)
-            Color.clear
-                .glassEffect(.regular, in: shape)
-                .opacity(isBlackCompact ? 0 : 1)
+            // Gate the glass with `if`, never opacity: a glass view faded to 0 still owns a backdrop
+            // layer, and when that layer is rasterized offscreen in a transparent window it can't
+            // sample the desktop and paints the whole panel black until the compositor recovers.
+            if isBlackCompact {
+                shape.fill(.black)
+            } else {
+                Color.clear
+                    .glassEffect(.regular, in: shape)
+                    .glassEffectTransition(.materialize)
+            }
             content
                 .padding(.horizontal, state.layout.flare)
         }
