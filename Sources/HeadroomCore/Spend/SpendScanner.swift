@@ -19,7 +19,24 @@ public actor SpendScanner {
         /// Dedup keys from the tail of the last read, so a record streamed across two scans is
         /// still counted once.
         var tailKeys: [String]
-        var carry: [String: String] = [:]
+        var carry: [String: String]
+
+        init(size: Int, ledger: SpendLedger, tailKeys: [String], carry: [String: String] = [:]) {
+            self.size = size
+            self.ledger = ledger
+            self.tailKeys = tailKeys
+            self.carry = carry
+        }
+
+        // Tolerate fields added after a cache was written; a decode failure would force a full
+        // rescan of every session file.
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            size = try c.decode(Int.self, forKey: .size)
+            ledger = try c.decode(SpendLedger.self, forKey: .ledger)
+            tailKeys = try c.decodeIfPresent([String].self, forKey: .tailKeys) ?? []
+            carry = try c.decodeIfPresent([String: String].self, forKey: .carry) ?? [:]
+        }
     }
 
     struct Cache: Codable {

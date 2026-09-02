@@ -78,9 +78,12 @@ final class UsageModel {
         }
     }
 
-    /// Sum across every provider with spend data, or nil when none has any.
+    /// Sum across every provider with logs. Nil until all of them have reported at least once, so
+    /// a first-launch scan still in progress never shows a partial number as the total.
     var totalSpend: SpendSummary? {
-        let all = visibleProviders.compactMap { spend[$0] }
+        let expected = scanners.filter { $0.value.hasLogs() }.map(\.key)
+        guard !expected.isEmpty, expected.allSatisfy({ spend[$0] != nil }) else { return nil }
+        let all = expected.compactMap { spend[$0] }
         guard let first = all.first else { return nil }
         return all.dropFirst().reduce(first, +)
     }
