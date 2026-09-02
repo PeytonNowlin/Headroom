@@ -5,8 +5,9 @@ public protocol UsageLogFormat: Sendable {
     var provider: ProviderID { get }
     var fileExtension: String { get }
     func roots(_ environment: HostEnvironment) -> [URL]
-    /// Parse one line. Return nil for lines that carry no usage.
-    func event(from line: Substring) -> UsageEvent?
+    /// Parse one line. Return nil for lines that carry no usage. `carry` is per-file state
+    /// (e.g. the model named by an earlier record) and persists across incremental scans.
+    func event(from line: Substring, carry: inout [String: String]) -> UsageEvent?
 }
 
 /// Incrementally scans a provider's logs into a `SpendLedger`, remembering per-file progress so a
@@ -18,6 +19,7 @@ public actor SpendScanner {
         /// Dedup keys from the tail of the last read, so a record streamed across two scans is
         /// still counted once.
         var tailKeys: [String]
+        var carry: [String: String] = [:]
     }
 
     struct Cache: Codable {
@@ -92,7 +94,7 @@ public actor SpendScanner {
         let text = String(decoding: consumable, as: UTF8.self)
         let calendar = environment.calendar
         for line in text.split(separator: "\n", omittingEmptySubsequences: true) {
-            guard let event = format.event(from: line) else { continue }
+            guard let event = format.event(from: line, carry: &progress.carry) else { continue }
             if let key = event.dedupKey {
                 if recentSet.contains(key) { continue }
                 recent.append(key)

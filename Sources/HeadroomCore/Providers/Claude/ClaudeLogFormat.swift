@@ -18,7 +18,7 @@ public struct ClaudeLogFormat: UsageLogFormat {
         return roots
     }
 
-    public func event(from line: Substring) -> UsageEvent? {
+    public func event(from line: Substring, carry: inout [String: String]) -> UsageEvent? {
         // Cheap pre-filter before paying for JSON parsing.
         guard line.contains("\"usage\""), line.contains("\"assistant\"") else { return nil }
         guard let json = try? JSON.parse(Data(line.utf8)), json["type"].string == "assistant" else { return nil }

@@ -25,9 +25,11 @@ public enum Formatting {
         return f.string(from: NSNumber(value: amount)) ?? "$\(amount)"
     }
 
-    /// `1.2M`, `845K`, `312`.
+    /// `1.2B`, `845M`, `1.2M`, `845K`, `312`.
     public static func tokens(_ count: Int) -> String {
         switch count {
+        case 1_000_000_000...:
+            return trim(Double(count) / 1_000_000_000) + "B"
         case 1_000_000...:
             return trim(Double(count) / 1_000_000) + "M"
         case 1_000...:
