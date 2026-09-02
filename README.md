@@ -21,10 +21,10 @@ Headroom reads the same credentials your CLIs already use and the same session l
 
 ## Install
 
-1. Download `Headroom-x.y.z.dmg` from the [latest release](https://github.com/PeytonNowlin/Headroom/releases/latest).
+1. Download `Headroom-x.y.z.dmg` from the [latest release](https://github.com/PeytonNowlin/Headroom/releases/latest). Each release also ships a `.sha256` file if you want to verify the download: `shasum -a 256 -c Headroom-x.y.z.dmg.sha256`.
 2. Open the DMG and drag Headroom to Applications.
-3. **First launch**: Headroom is ad-hoc signed, not notarized, so Gatekeeper will refuse a double-click. Right-click `Headroom.app` → **Open**, then click **Open** in the dialog. You only need to do this once.
-4. Headroom asks to launch at login on first run; you can change that in Settings.
+3. **First launch**: Headroom is ad-hoc signed, not notarized, so Gatekeeper blocks the first open. Double-click `Headroom.app`, dismiss the dialog, then go to **System Settings → Privacy & Security**, scroll to the Security section, and click **Open Anyway** next to Headroom. You only need to do this once.
+4. Headroom registers itself as a login item on first run (macOS shows a "Login Items" notification); turn that off in Settings if you prefer.
 
 If macOS says the app is "damaged", clear the quarantine flag instead: `xattr -dr com.apple.quarantine /Applications/Headroom.app`.
 
