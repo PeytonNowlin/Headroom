@@ -172,9 +172,3 @@ enum Fixtures {
         String(decoding: data(name), as: UTF8.self)
     }
 }
-
-extension Duration {
-    var seconds: Double {
-        Double(components.seconds) + Double(components.attoseconds) / 1e18
-    }
-}

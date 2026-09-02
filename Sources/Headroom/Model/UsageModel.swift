@@ -12,14 +12,16 @@ final class UsageModel {
     private(set) var now = Date()
 
     let environment: HostEnvironment
+    let preferences: Preferences
     private var pollers: [ProviderID: ProviderPoller] = [:]
     private var scanners: [ProviderID: SpendScanner] = [:]
     private let pricing: PricingStore
     private var tasks: [Task<Void, Never>] = []
     static let spendInterval: Duration = .seconds(120)
 
-    init(environment: HostEnvironment = .live()) {
+    init(environment: HostEnvironment = .live(), preferences: Preferences = Preferences()) {
         self.environment = environment
+        self.preferences = preferences
         pricing = PricingStore(environment: environment)
         let runtimes: [any ProviderRuntime] = [
             ClaudeProvider(environment: environment),
@@ -33,17 +35,22 @@ final class UsageModel {
         let store = SnapshotStore(environment: environment)
         let restored = store.load()
         for runtime in runtimes {
+            let entry = restored[runtime.id]
             let poller = ProviderPoller(runtime: runtime, environment: environment,
-                                        initialSnapshot: restored[runtime.id])
+                                        initialSnapshot: entry?.snapshot,
+                                        rateLimitedUntil: entry?.rateLimitedUntil)
             pollers[runtime.id] = poller
-            states[runtime.id] = ProviderState(provider: runtime.id, snapshot: restored[runtime.id],
-                                               hasCredentials: runtime.hasLocalCredentials())
+            states[runtime.id] = ProviderState(provider: runtime.id, snapshot: entry?.snapshot,
+                                               hasCredentials: runtime.hasLocalCredentials(),
+                                               rateLimitedUntil: entry?.rateLimitedUntil)
             tasks.append(Task { [weak self] in
                 for await state in poller.states {
                     guard let self else { return }
-                    let changed = state.snapshot != self.states[state.provider]?.snapshot
+                    let previous = self.states[state.provider]
                     self.states[state.provider] = state
-                    if changed { self.persistSnapshots() }
+                    if state.snapshot != previous?.snapshot || state.rateLimitedUntil != previous?.rateLimitedUntil {
+                        self.persistSnapshots()
+                    }
                 }
             })
         }
@@ -95,20 +102,32 @@ final class UsageModel {
     }
 
     private func persistSnapshots() {
-        var snapshots: [ProviderID: Snapshot] = [:]
+        var entries: [ProviderID: SnapshotStore.Entry] = [:]
         for (id, state) in states {
-            if let s = state.snapshot, s.status != .absent { snapshots[id] = s }
+            let snapshot = state.snapshot.flatMap { $0.status == .absent ? nil : $0 }
+            if snapshot != nil || state.rateLimitedUntil != nil {
+                entries[id] = SnapshotStore.Entry(snapshot: snapshot, rateLimitedUntil: state.rateLimitedUntil)
+            }
         }
-        SnapshotStore(environment: environment).save(snapshots)
+        SnapshotStore(environment: environment).save(entries)
     }
 
-    /// Providers worth drawing: anything with local credentials, anything with a non-absent
-    /// snapshot, and anything mid-first-refresh. A failing provider stays on screen.
+    /// Whether a provider has anything to show on its own merits: local credentials, a
+    /// non-absent snapshot, or a first refresh in flight. A failing provider stays on screen.
+    func isDetected(_ id: ProviderID) -> Bool {
+        guard let state = states[id] else { return false }
+        if let snapshot = state.snapshot { return snapshot.status != .absent || state.hasCredentials }
+        return state.hasCredentials || state.isRefreshing
+    }
+
+    /// Providers to draw, in the user's order, honoring per-provider visibility overrides.
     var visibleProviders: [ProviderID] {
-        ProviderID.allCases.filter { id in
-            guard let state = states[id] else { return false }
-            if let snapshot = state.snapshot { return snapshot.status != .absent || state.hasCredentials }
-            return state.hasCredentials || state.isRefreshing
+        preferences.order.filter { id in
+            switch preferences.visibility(id) {
+            case .show: true
+            case .hide: false
+            case .auto: isDetected(id)
+            }
         }
     }
 

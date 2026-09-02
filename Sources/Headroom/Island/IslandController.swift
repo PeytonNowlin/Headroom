@@ -160,6 +160,16 @@ final class IslandController {
         NSMenu.popUpContextMenu(menu, with: event, for: host)
     }
 
+    /// Hide/show for full-screen spaces without tearing down state.
+    func setHidden(_ hidden: Bool) {
+        guard let panel else { return }
+        if hidden {
+            panel.orderOut(nil)
+        } else {
+            panel.orderFrontRegardless()
+        }
+    }
+
     @objc private func refreshNow() { model.refreshAll() }
     @objc private func pinFromMenu() { togglePinned() }
     @objc private func openSettings() { onOpenSettings() }

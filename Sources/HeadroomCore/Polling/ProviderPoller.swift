@@ -1,5 +1,11 @@
 import Foundation
 
+public extension Duration {
+    var seconds: Double {
+        Double(components.seconds) + Double(components.attoseconds) / 1e18
+    }
+}
+
 /// Exponential back-off for retryable refresh failures.
 public struct BackoffPolicy: Sendable, Equatable {
     public var base: Duration
@@ -31,15 +37,23 @@ public struct ProviderState: Sendable, Equatable {
     /// Whether any credential source exists locally, independent of whether a refresh has
     /// succeeded. A provider with credentials stays visible even while every refresh fails.
     public var hasCredentials: Bool
+    /// After a 429, no request (scheduled or manual) goes out before this instant.
+    public var rateLimitedUntil: Date?
 
     public init(provider: ProviderID, snapshot: Snapshot? = nil, lastError: String? = nil,
-                consecutiveFailures: Int = 0, isRefreshing: Bool = false, hasCredentials: Bool = false) {
+                consecutiveFailures: Int = 0, isRefreshing: Bool = false, hasCredentials: Bool = false,
+                rateLimitedUntil: Date? = nil) {
         self.provider = provider
         self.snapshot = snapshot
         self.lastError = lastError
         self.consecutiveFailures = consecutiveFailures
         self.isRefreshing = isRefreshing
         self.hasCredentials = hasCredentials
+        self.rateLimitedUntil = rateLimitedUntil
+    }
+
+    public func isRateLimited(at now: Date) -> Bool {
+        rateLimitedUntil.map { $0 > now } ?? false
     }
 
     /// True when we have credentials but no snapshot and the last attempt failed.
@@ -77,18 +91,17 @@ public actor ProviderPoller {
     /// Poll cadence, matching OpenUsage: one fetch per provider every five minutes, plus launch
     /// and the manual Refresh. Anything faster invites 429s from the usage endpoints.
     public static let defaultInterval: TimeInterval = 5 * 60
-    /// Minimum wait after a 429 when the server gives no hint.
-    public static let rateLimitFloor: Duration = .seconds(10 * 60)
 
     public init(runtime: any ProviderRuntime, environment: HostEnvironment,
                 interval: Duration = .seconds(defaultInterval), backoff: BackoffPolicy = .standard,
-                initialSnapshot: Snapshot? = nil) {
+                initialSnapshot: Snapshot? = nil, rateLimitedUntil: Date? = nil) {
         self.runtime = runtime
         self.environment = environment
         self.interval = interval
         self.backoff = backoff
         self.state = ProviderState(provider: runtime.id, snapshot: initialSnapshot,
-                                   hasCredentials: runtime.hasLocalCredentials())
+                                   hasCredentials: runtime.hasLocalCredentials(),
+                                   rateLimitedUntil: rateLimitedUntil)
         var cont: AsyncStream<ProviderState>.Continuation?
         self.states = AsyncStream(bufferingPolicy: .bufferingNewest(8)) { cont = $0 }
         self.continuation = cont
@@ -114,8 +127,13 @@ public actor ProviderPoller {
         wake = nil
     }
 
-    /// Interrupts the current wait so the next refresh happens immediately.
+    /// Interrupts the current wait so the next refresh happens immediately — unless the provider
+    /// is cooling down from a 429, in which case the request is deliberately not made.
     public func refreshNow() {
+        if state.isRateLimited(at: environment.now()) {
+            HeadroomLog.polling.info("\(self.runtime.id.rawValue, privacy: .public) manual refresh skipped: rate-limit cooldown")
+            return
+        }
         if let wake {
             self.wake = nil
             wake.resume()
@@ -130,10 +148,16 @@ public actor ProviderPoller {
     }
 
     private func refreshAndScheduleDelay() async -> Duration {
+        let now = environment.now()
+        if let until = state.rateLimitedUntil, until > now {
+            // Still cooling down (e.g. restored from disk after a relaunch): wait it out first.
+            return .seconds(until.timeIntervalSince(now))
+        }
         let credentialed = runtime.hasLocalCredentials()
         publish {
             $0.isRefreshing = true
             $0.hasCredentials = credentialed
+            $0.rateLimitedUntil = nil
         }
         do {
             let snapshot = try await runtime.refresh()
@@ -154,8 +178,11 @@ public actor ProviderPoller {
             }
             let delay = backoff.delay(afterFailures: state.consecutiveFailures)
             if case let .rateLimited(hint) = error as? ProviderError {
-                let floor = hint.map { Duration.seconds($0) } ?? Self.rateLimitFloor
-                return max(delay, floor)
+                // Never sooner than the next regular slot; later if the server asked for it.
+                let cooldown = max(interval, hint.map { Duration.seconds($0) } ?? .zero, delay)
+                let until = environment.now().addingTimeInterval(cooldown.seconds)
+                publish { $0.rateLimitedUntil = until }
+                return cooldown
             }
             return delay
         }
