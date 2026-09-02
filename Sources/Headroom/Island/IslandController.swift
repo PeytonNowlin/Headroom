@@ -191,6 +191,12 @@ final class IslandController {
         NSMenu.popUpContextMenu(menu, with: event, for: host)
     }
 
+    /// Switches the body to solid bezel while a full-screen app owns the space.
+    func setFullScreenActive(_ active: Bool) {
+        guard state.fullScreenActive != active else { return }
+        withAnimation(Motion.materialize) { state.fullScreenActive = active }
+    }
+
     /// Hide/show for full-screen spaces without tearing down state.
     func setHidden(_ hidden: Bool) {
         guard let panel else { return }

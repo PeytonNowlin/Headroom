@@ -22,10 +22,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem.onSettings = { settings.show() }
         fullScreen.onChange = { [weak self] active in
             guard let self, let model = self.model else { return }
+            self.island?.setFullScreenActive(active)
             self.island?.setHidden(active && model.preferences.hideInFullScreen)
         }
 
         island.show()
+        island.setFullScreenActive(fullScreen.isFullScreen)
         model.start()
         model.preferences.registerLoginItemOnFirstRun()
         scheduleFirstRunGuidance(model: model, island: island)

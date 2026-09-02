@@ -9,6 +9,7 @@ struct IslandView: View {
     var model: UsageModel
     var onSelect: (ProviderID?) -> Void = { _ in }
     var onOpenSettings: () -> Void = {}
+    @Environment(\.colorScheme) private var colorScheme
 
     private var shape: IslandShape {
         IslandShape(cornerRadius: state.layout.cornerRadius, flare: state.layout.flare)
@@ -19,8 +20,10 @@ struct IslandView: View {
         return CGSize(width: s.width + state.layout.flare * 2, height: s.height)
     }
 
-    private var isBlackCompact: Bool {
-        state.layout.anchor.isNotch && state.mode == .compact
+    /// Solid bezel instead of glass: compact on a notch (so it reads as the notch), or any mode
+    /// while a full-screen app owns the space (where glass has nothing to sample).
+    private var isBlack: Bool {
+        (state.layout.anchor.isNotch && state.mode == .compact) || state.fullScreenActive
     }
 
     var body: some View {
@@ -28,7 +31,7 @@ struct IslandView: View {
             // Gate the glass with `if`, never opacity: a glass view faded to 0 still owns a backdrop
             // layer, and when that layer is rasterized offscreen in a transparent window it can't
             // sample the desktop and paints the whole panel black until the compositor recovers.
-            if isBlackCompact {
+            if isBlack {
                 shape.fill(.black)
             } else {
                 Color.clear
@@ -37,6 +40,7 @@ struct IslandView: View {
             }
             content
                 .padding(.horizontal, state.layout.flare)
+                .environment(\.colorScheme, isBlack ? .dark : colorScheme)
         }
         .frame(width: size.width, height: size.height, alignment: .top)
         .clipShape(shape)
