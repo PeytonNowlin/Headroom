@@ -1,0 +1,7 @@
+{
+  "release_channel": "stable",
+  "default_model": "grok-4.6",
+  "subscription_tier_display": "SuperGrok",
+  "allow_access": true,
+  "subagents_enabled": true
+}

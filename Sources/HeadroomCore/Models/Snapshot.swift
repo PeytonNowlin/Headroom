@@ -54,6 +54,8 @@ public struct Snapshot: Sendable, Equatable, Codable {
     public var extraUsage: ExtraUsage?
     /// Codex on-demand rate-limit reset credits available.
     public var resetCredits: Int?
+    /// A provider-specific explanation worth surfacing in the drill-in (e.g. why no windows exist).
+    public var note: String?
 
     public init(
         provider: ProviderID,

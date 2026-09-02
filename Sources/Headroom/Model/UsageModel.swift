@@ -19,6 +19,7 @@ final class UsageModel {
         let runtimes: [any ProviderRuntime] = [
             ClaudeProvider(environment: environment),
             CodexProvider(environment: environment),
+            GrokProvider(environment: environment),
         ]
         for runtime in runtimes {
             let poller = ProviderPoller(runtime: runtime, environment: environment)

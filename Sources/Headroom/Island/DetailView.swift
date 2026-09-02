@@ -30,6 +30,12 @@ struct DetailView: View {
                             WindowRow(window: window, now: now)
                         }
                     }
+                    if let note = snapshot.note {
+                        Text(note)
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                     if let extra = snapshot.extraUsage {
                         LabeledRow(title: "Extra Usage", value: Formatting.extraUsage(extra))
                     }
