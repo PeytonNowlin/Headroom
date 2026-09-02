@@ -78,15 +78,15 @@ struct ProviderPollerTests {
         #expect(Array(world.sleeps.prefix(4)).map(\.seconds) == [60, 60, 120, 240])
     }
 
-    @Test("a snapshot reads connected for five minutes, then stale")
-    func staleAfterFiveMinutes() {
+    @Test("a snapshot reads connected for three poll intervals, then stale")
+    func staleAfterThreeMissedPolls() {
         let fetched = Date(timeIntervalSince1970: 1_000_000)
         let state = ProviderState(
             provider: .claude,
             snapshot: Snapshot(provider: .claude, fetchedAt: fetched, status: .connected)
         )
-        #expect(state.status(at: fetched.addingTimeInterval(299)) == .connected)
-        #expect(state.status(at: fetched.addingTimeInterval(301)) == .stale)
+        #expect(state.status(at: fetched.addingTimeInterval(899)) == .connected)
+        #expect(state.status(at: fetched.addingTimeInterval(901)) == .stale)
 
         let expired = ProviderState(provider: .claude, snapshot: .expired(.claude, at: fetched))
         #expect(expired.status(at: fetched.addingTimeInterval(9999)) == .expired)
