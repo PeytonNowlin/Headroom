@@ -4,6 +4,12 @@ All notable changes to Headroom. The format follows [Keep a Changelog](https://k
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-09-02
+
+### Fixed
+
+- Fixed release builds crashing at launch on other Macs because SwiftPM resource bundles were packaged somewhere the generated bundle loader could not find them.
+
 ## [0.2.0] - 2026-09-02
 
 ### Changed
@@ -26,6 +32,7 @@ First release.
 - Alert banners at 80% and 95% of any window and when pace projects exhaustion before reset.
 - Next-refresh countdown; rate-limit cooldowns honor `Retry-After` and persist across relaunch.
 
-[Unreleased]: https://github.com/PeytonNowlin/Headroom/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/PeytonNowlin/Headroom/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/PeytonNowlin/Headroom/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/PeytonNowlin/Headroom/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/PeytonNowlin/Headroom/releases/tag/v0.1.0
