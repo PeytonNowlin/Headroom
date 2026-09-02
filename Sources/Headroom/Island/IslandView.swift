@@ -57,7 +57,7 @@ struct IslandView: View {
     // MARK: - Compact
 
     private var compactContent: some View {
-        let providers = model.visibleProviders
+        let providers = model.dotProviders
         let split = (providers.count + 1) / 2
         return HStack(spacing: 0) {
             HStack(spacing: 6) {

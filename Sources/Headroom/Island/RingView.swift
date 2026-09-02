@@ -106,18 +106,26 @@ struct ProviderDot: View {
 
     var body: some View {
         Circle()
-            .fill(color)
+            .fill(Self.color(state: state, status: status, scheme: scheme) ?? .clear)
             .frame(width: 6, height: 6)
             .opacity(status == .stale ? 0.6 : 1)
     }
 
-    private var color: Color {
+    /// Nil means "no dot": there is no quota to summarize (e.g. a Grok Business login, which
+    /// publishes no personal limits) or no credentials at all.
+    static func color(state: ProviderState?, status: ConnectionStatus, scheme: ColorScheme) -> Color? {
         switch status {
-        case .expired: return .secondary.opacity(0.6)
-        case .absent: return state?.hasCredentials == true ? .secondary.opacity(0.4) : .clear
+        case .expired:
+            return .secondary.opacity(0.6)
+        case .absent:
+            return state?.isErrored == true ? .secondary.opacity(0.4) : nil
         case .connected, .stale:
-            guard let used = state?.snapshot?.ringUsedPercent else { return .secondary.opacity(0.4) }
+            guard let used = state?.snapshot?.ringUsedPercent else { return nil }
             return Urgency(usedPercent: used).color(for: scheme)
         }
+    }
+
+    static func shows(state: ProviderState?, status: ConnectionStatus) -> Bool {
+        color(state: state, status: status, scheme: .dark) != nil
     }
 }

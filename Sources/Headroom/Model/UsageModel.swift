@@ -112,6 +112,20 @@ final class UsageModel {
         }
     }
 
+    /// Providers that get a compact dot: only those with a quota (or an expired/failing login)
+    /// to summarize. The first half sit left of the notch, the rest right.
+    var dotProviders: [ProviderID] {
+        visibleProviders.filter { ProviderDot.shows(state: states[$0], status: status($0)) }
+    }
+
+    enum DotSide { case left, right, none }
+
+    func dotSide(_ id: ProviderID) -> DotSide {
+        let dots = dotProviders
+        guard let index = dots.firstIndex(of: id) else { return .none }
+        return index < (dots.count + 1) / 2 ? .left : .right
+    }
+
     func state(_ id: ProviderID) -> ProviderState? { states[id] }
 
     func status(_ id: ProviderID) -> ConnectionStatus {
