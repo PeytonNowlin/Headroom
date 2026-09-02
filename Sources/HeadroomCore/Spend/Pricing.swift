@@ -54,8 +54,8 @@ public struct PricingTable: Sendable, Equatable, Codable {
             m.removeSubrange(range)
             out.append(m)
         }
-        if m.hasSuffix("-latest") {
-            m.removeLast("-latest".count)
+        for suffix in ["-latest", "-build"] where m.hasSuffix(suffix) {
+            m.removeLast(suffix.count)
             out.append(m)
         }
         return out

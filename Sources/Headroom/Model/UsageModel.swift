@@ -26,7 +26,7 @@ final class UsageModel {
             CodexProvider(environment: environment),
             GrokProvider(environment: environment),
         ]
-        let formats: [any UsageLogFormat] = [ClaudeLogFormat(), CodexLogFormat()]
+        let formats: [any UsageLogFormat] = [ClaudeLogFormat(), CodexLogFormat(), GrokLogFormat()]
         for format in formats {
             scanners[format.provider] = SpendScanner(format: format, environment: environment)
         }

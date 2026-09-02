@@ -5,9 +5,15 @@ public protocol UsageLogFormat: Sendable {
     var provider: ProviderID { get }
     var fileExtension: String { get }
     func roots(_ environment: HostEnvironment) -> [URL]
+    /// Whether a discovered file should be read at all; defaults to every file with the extension.
+    func includes(_ file: URL, environment: HostEnvironment) -> Bool
     /// Parse one line. Return nil for lines that carry no usage. `carry` is per-file state
     /// (e.g. the model named by an earlier record) and persists across incremental scans.
     func event(from line: Substring, carry: inout [String: String]) -> UsageEvent?
+}
+
+public extension UsageLogFormat {
+    func includes(_ file: URL, environment: HostEnvironment) -> Bool { true }
 }
 
 /// Incrementally scans a provider's logs into a `SpendLedger`, remembering per-file progress so a
@@ -74,6 +80,7 @@ public actor SpendScanner {
 
         for root in format.roots(environment) {
             for url in environment.enumerateFiles(root, format.fileExtension) {
+                guard format.includes(url, environment: environment) else { continue }
                 let path = url.path(percentEncoded: false)
                 seen.insert(path)
                 guard let info = environment.fileInfo(url) else { continue }
