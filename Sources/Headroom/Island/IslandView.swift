@@ -107,6 +107,18 @@ struct IslandView: View {
         .frame(width: state.layout.compact.width, height: state.layout.compact.height)
     }
 
+    private func providerDescription(_ id: ProviderID) -> String {
+        let state = model.state(id)
+        var parts = [quotaDescription(id), state?.freshness(at: model.now) ?? "Not signed in"]
+        if let window = state?.snapshot?.limitingWindow {
+            parts.append(window.title)
+            parts.append(window.resetsAt.map {
+                $0 > model.now ? "Resets in \(Formatting.countdown(to: $0, from: model.now))" : "Awaiting reset"
+            } ?? "Reset not reported")
+        }
+        return parts.joined(separator: ", ")
+    }
+
     private func quotaDescription(_ id: ProviderID) -> String {
         guard let remaining = model.state(id)?.snapshot?.ringRemainingPercent else { return "Quota unavailable" }
         return "\(Int(remaining.rounded())) percent remaining"
@@ -188,7 +200,7 @@ struct IslandView: View {
                                 .allowsHitTesting(false)
                         }
                         .accessibilityLabel(id.displayName)
-                        .accessibilityValue(quotaDescription(id))
+                        .accessibilityValue(providerDescription(id))
                         .accessibilityHint("Open quota details for \(id.displayName)")
                     }
                 }
@@ -199,7 +211,7 @@ struct IslandView: View {
                 Button { onOpenTrends(nil) } label: { SpendFooter(summary: total) }
                     .buttonStyle(.plain)
                     .focusable()
-                    .onKeyPress(keys: [.return, .space]) { _ in onOpenTrends(nil); return .handled }
+                    .onKeyPress(keys: [.return, .space], phases: .down) { _ in onOpenTrends(nil); return .handled }
                     .help("Open usage trends")
                     .accessibilityLabel("Usage trends, estimated token value")
                     .transition(.opacity)

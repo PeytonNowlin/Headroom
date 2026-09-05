@@ -53,7 +53,7 @@ struct DetailView: View {
                 .font(.system(size: 11))
                 .buttonStyle(.plain)
                 .focusable()
-                .onKeyPress(keys: [.return, .space]) { _ in toggleWarnings(); return .handled }
+                .onKeyPress(keys: [.return, .space], phases: .down) { _ in toggleWarnings(); return .handled }
                 .accessibilityLabel(model.alertsSnoozed(provider) ? "Resume quota warnings" : "Snooze warnings until reset")
                 .foregroundStyle(.secondary)
                 .help("Each current quota window stays snoozed until its own reset. Quota-return alerts remain enabled if selected.")
@@ -64,7 +64,7 @@ struct DetailView: View {
                 Button("Usage trends…", action: onOpenTrends)
                     .controlSize(.small)
                     .focusable()
-                    .onKeyPress(keys: [.return, .space]) { _ in onOpenTrends(); return .handled }
+                    .onKeyPress(keys: [.return, .space], phases: .down) { _ in onOpenTrends(); return .handled }
                     .accessibilityLabel("Open usage trends")
             }
         }
@@ -106,7 +106,7 @@ struct DetailView: View {
         }
         .buttonStyle(.plain)
         .focusable()
-        .onKeyPress(keys: [.return, .space]) { _ in onBack(); return .handled }
+        .onKeyPress(keys: [.return, .space], phases: .down) { _ in onBack(); return .handled }
         .accessibilityLabel("Back to all providers")
         .focused($backFocused)
     }
