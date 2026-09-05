@@ -6,10 +6,25 @@ struct SpendTiles: View {
     let summary: SpendSummary
 
     var body: some View {
-        HStack(spacing: 8) {
-            SpendTileView(title: "Today", tile: summary.today)
-            SpendTileView(title: "Yesterday", tile: summary.yesterday)
-            SpendTileView(title: "30 Days", tile: summary.last30Days)
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Estimated token value")
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(.secondary)
+            HStack(spacing: 8) {
+                SpendTileView(title: "Today", tile: summary.today)
+                SpendTileView(title: "Yesterday", tile: summary.yesterday)
+                SpendTileView(title: "30 Days", tile: summary.last30Days)
+            }
+            Text("Usage valued from token prices or recorded costs; not your subscription bill.")
+                .font(.system(size: 10))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            if summary.last30Days.unpricedTokens > 0 {
+                Text("* Partial estimate · \(Formatting.tokens(summary.last30Days.unpricedTokens)) tokens have no known price.")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
     }
 }
@@ -51,13 +66,19 @@ struct SpendFooter: View {
     let summary: SpendSummary
 
     var body: some View {
-        HStack(spacing: 14) {
-            item("Today", summary.today)
-            divider
-            item("Yesterday", summary.yesterday)
-            divider
-            item("30d", summary.last30Days)
+        VStack(spacing: 4) {
+            Text(summary.last30Days.unpricedTokens > 0 ? "Estimated token value · * incomplete pricing" : "Estimated token value")
+                .font(.system(size: 9.5))
+                .foregroundStyle(.secondary)
+            HStack(spacing: 14) {
+                item("Today", summary.today)
+                divider
+                item("Yesterday", summary.yesterday)
+                divider
+                item("30d", summary.last30Days)
+            }
         }
+        .help("Token value uses model prices or recorded costs, not your subscription bill. An asterisk means some tokens have no known price and are excluded.")
         .font(.system(size: 11, design: .rounded))
         .monospacedDigit()
     }
@@ -70,7 +91,7 @@ struct SpendFooter: View {
         VStack(spacing: 1) {
             HStack(spacing: 4) {
                 Text(label).foregroundStyle(.tertiary)
-                Text(tile.hasData ? Formatting.dollars(tile.cost) : "—")
+                Text(tile.hasData ? Formatting.dollars(tile.cost) + (tile.unpricedTokens > 0 ? "*" : "") : "—")
                     .fontWeight(.medium)
                     .foregroundStyle(.secondary)
                     .contentTransition(.numericText())

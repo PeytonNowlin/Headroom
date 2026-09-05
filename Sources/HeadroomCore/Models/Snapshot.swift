@@ -77,7 +77,11 @@ public struct Snapshot: Sendable, Equatable, Codable {
 
     /// The most-constrained percentage window drives the ring. Nil when there are no windows.
     public var ringUsedPercent: Double? {
-        windows.map(\.usedPercent).max()
+        limitingWindow?.usedPercent
+    }
+
+    public var limitingWindow: QuotaWindow? {
+        windows.filter { $0.usedPercent.isFinite }.max { $0.usedPercent < $1.usedPercent }
     }
 
     public var ringRemainingPercent: Double? {

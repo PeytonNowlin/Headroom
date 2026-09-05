@@ -22,6 +22,11 @@ let package = Package(
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
         .testTarget(
+            name: "HeadroomTests",
+            dependencies: ["Headroom"],
+            swiftSettings: [.swiftLanguageMode(.v6)]
+        ),
+        .testTarget(
             name: "HeadroomCoreTests",
             dependencies: ["HeadroomCore"],
             resources: [.copy("Fixtures")],

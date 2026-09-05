@@ -4,6 +4,29 @@ All notable changes to Headroom. The format follows [Keep a Changelog](https://k
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-05
+
+### Added
+
+- Each provider ring now identifies its limiting quota window and shows its reset countdown and freshness, including explicit saved-data and failed-refresh states.
+- Recent-usage forecasts backed by a bounded local history of quota percentages. Forecasts compare recent and whole-window pace, require enough fresh observations, and suppress pace warnings for bursty usage.
+- Per-provider quota warning controls, snooze until each current window resets, and opt-in banners when a confirmed reset restores quota after high usage.
+- Provider-specific sign-in and reconnect guidance with individual **Check again** actions that respect rate-limit cooldowns.
+- Non-color compact status indicators and descriptive accessibility labels. Repeating ring animations respect Reduce Motion.
+
+### Changed
+
+- Token costs are clearly labeled **Estimated token value**, with missing prices disclosed in both detail tiles and the combined footer. Provider-reported extra usage remains separate.
+- Threshold and pace warnings for the same window are combined into one readable banner.
+- The expanded island gives quota context more room; long provider details scroll within the panel.
+- Existing provider order, visibility, and behavior preferences are preserved when alert settings are introduced.
+
+### Fixed
+
+- Restored quota snapshots are identified as saved data until a successful refresh.
+- Quota-return banners also recognize Claude sessions that reset to an idle, unused state before the next session starts.
+- Downloaded release checksums refer to the DMG filename rather than a local build directory.
+
 ## [0.2.1] - 2026-09-02
 
 ### Fixed
@@ -32,7 +55,8 @@ First release.
 - Alert banners at 80% and 95% of any window and when pace projects exhaustion before reset.
 - Next-refresh countdown; rate-limit cooldowns honor `Retry-After` and persist across relaunch.
 
-[Unreleased]: https://github.com/PeytonNowlin/Headroom/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/PeytonNowlin/Headroom/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/PeytonNowlin/Headroom/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/PeytonNowlin/Headroom/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/PeytonNowlin/Headroom/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/PeytonNowlin/Headroom/releases/tag/v0.1.0

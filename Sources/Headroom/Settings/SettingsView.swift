@@ -11,13 +11,15 @@ struct SettingsView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
                 providers
+                connections
+                alerts
                 legend
                 behavior
                 about
             }
             .padding(22)
         }
-        .frame(width: 440)
+        .frame(width: 520)
         .frame(minHeight: 520, idealHeight: 620)
         .background(.regularMaterial)
     }
@@ -39,18 +41,78 @@ struct SettingsView: View {
         }
     }
 
+    private var connections: some View {
+        Section("Connections", footnote: "Headroom only reads your existing logins. Sign in using the provider, then check again here.") {
+            VStack(alignment: .leading, spacing: 14) {
+                ForEach(preferences.order) { id in
+                    VStack(alignment: .leading, spacing: 5) {
+                        Label { Text(id.displayName).fontWeight(.medium) } icon: {
+                            ProviderGlyph(provider: id, size: 12)
+                        }
+                        ConnectionView(provider: id, state: model.state(id), now: model.now) { model.refresh(id) }
+                    }
+                }
+            }
+            .padding(12)
+            .background(.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 10))
+        }
+    }
+
+    private var alerts: some View {
+        Section("Quota alerts", footnote: "Warnings appear at 80% and 95% used, or when a steady recent pace may exhaust quota. Quota-return banners require a confirmed reset after usage reached 80%. Snooze applies to each current window until its own reset.") {
+            VStack(alignment: .leading, spacing: 14) {
+                ForEach(preferences.order) { id in
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(id.displayName).fontWeight(.medium)
+                        Toggle("Quota warnings", isOn: Binding(
+                            get: { preferences.alertOptions(id).warningsEnabled },
+                            set: { value in
+                                var options = preferences.alertOptions(id)
+                                options.warningsEnabled = value
+                                model.setAlertOptions(options, for: id)
+                            }
+                        ))
+                        Toggle("Banner when quota returns", isOn: Binding(
+                            get: { preferences.alertOptions(id).notifyOnReset },
+                            set: { value in
+                                var options = preferences.alertOptions(id)
+                                options.notifyOnReset = value
+                                model.setAlertOptions(options, for: id)
+                            }
+                        ))
+                        if preferences.alertOptions(id).warningsEnabled {
+                            Button(model.alertsSnoozed(id) ? "Resume warnings" : "Snooze until reset") {
+                                if model.alertsSnoozed(id) { model.resumeAlerts(id) }
+                                else { model.snoozeAlerts(id) }
+                            }
+                            .disabled(model.state(id)?.snapshot?.windows.contains { ($0.resetsAt.map { $0 > model.now } ?? false) } != true)
+                        }
+                    }
+                    .accessibilityElement(children: .contain)
+                    .accessibilityLabel(id.displayName + " alerts")
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .font(.system(size: 12))
+            .toggleStyle(.switch)
+            .controlSize(.small)
+            .padding(12)
+            .background(.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 10))
+        }
+    }
+
     // MARK: - Legend
 
     private var legend: some View {
-        Section("Dot & ring colors", footnote: "Each dot beside the notch is one provider's most-constrained quota window, keyed on percent used.") {
-            HStack(spacing: 14) {
+        Section("Dot & ring colors", footnote: "Dots summarize the most-constrained window. A hollow dot means 40–69% used, a dash means 70–89%, and ! means 90%+ or a connection problem. Faded dots show saved usage.") {
+            HStack(spacing: 10) {
                 legendItem(.fine, "< 40%")
                 legendItem(.watch, "40–69%")
                 legendItem(.warn, "70–89%")
                 legendItem(.critical, "90%+")
                 Spacer()
                 HStack(spacing: 6) {
-                    Circle().fill(.secondary.opacity(0.6)).frame(width: 8, height: 8)
+                    Text("!").font(.system(size: 11, weight: .heavy)).foregroundStyle(.secondary)
                     Text("Login expired").font(.system(size: 11)).foregroundStyle(.secondary)
                 }
             }
@@ -62,7 +124,17 @@ struct SettingsView: View {
 
     private func legendItem(_ urgency: Urgency, _ label: String) -> some View {
         HStack(spacing: 6) {
-            Circle().fill(urgency.color(for: scheme)).frame(width: 8, height: 8)
+            Group {
+                switch urgency {
+                case .fine: Circle().frame(width: 8, height: 8)
+                case .watch: Circle().strokeBorder(lineWidth: 1.5).frame(width: 8, height: 8)
+                case .warn: Capsule().frame(width: 8, height: 3)
+                case .critical: Text("!").font(.system(size: 11, weight: .heavy))
+                }
+            }
+            .foregroundStyle(urgency.color(for: scheme))
+            .frame(width: 8, height: 10)
+            .accessibilityHidden(true)
             Text(label).font(.system(size: 11)).foregroundStyle(.secondary)
         }
     }
@@ -168,10 +240,14 @@ private struct ProviderRow: View {
         let status = model.status(id)
         HStack(spacing: 10) {
             // The exact dot this provider shows beside the notch, live.
-            Circle()
-                .fill(ProviderDot.color(state: state, status: status, scheme: scheme) ?? .clear)
-                .overlay(Circle().strokeBorder(.secondary.opacity(0.3), lineWidth: ProviderDot.shows(state: state, status: status) ? 0 : 1))
-                .frame(width: 8, height: 8)
+            Group {
+                if ProviderDot.shows(state: state, status: status) {
+                    ProviderDot(state: state, status: status)
+                } else {
+                    Circle().strokeBorder(.secondary.opacity(0.3), lineWidth: 1)
+                }
+            }
+            .frame(width: 8, height: 10)
             ProviderGlyph(provider: id, size: 12)
                 .frame(width: 16)
             VStack(alignment: .leading, spacing: 1) {

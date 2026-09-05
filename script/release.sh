@@ -23,15 +23,16 @@ cp -R build/Headroom.app "$STAGE/"
 ln -s /Applications "$STAGE/Applications"
 hdiutil create -volname "Headroom" -srcfolder "$STAGE" -ov -format UDZO "$DMG" >/dev/null
 rm -rf "$STAGE"
-shasum -a 256 "$DMG" | tee "$DMG.sha256"
+(cd build && shasum -a 256 "Headroom-$VERSION.dmg") | tee "$DMG.sha256"
 
 # Release notes are this version's CHANGELOG section.
-NOTES="$(awk -v v="$VERSION" '
+NOTES_FILE="build/Headroom-$VERSION-notes.md"
+awk -v v="$VERSION" '
   /^## \[/ { if (found) exit; found = ($0 ~ "^## \\[" v "\\]"); next }
   found { print }
-' CHANGELOG.md)"
+' CHANGELOG.md > "$NOTES_FILE"
 
 git tag -a "$TAG" -m "Headroom $TAG"
 git push origin "$TAG"
-gh release create "$TAG" "$DMG" "$DMG.sha256" --title "Headroom $TAG" --notes "$NOTES"
+gh release create "$TAG" "$DMG" "$DMG.sha256" --title "Headroom $TAG" --notes-file "$NOTES_FILE" --verify-tag --latest
 echo "Released $TAG"

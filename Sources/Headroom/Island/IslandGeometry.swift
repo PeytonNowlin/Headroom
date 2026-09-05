@@ -49,7 +49,7 @@ struct IslandLayout: Equatable {
     var cornerRadius: CGFloat
 
     /// Tallest the island can ever be; the panel is sized to this so it never resizes.
-    static let maxHeight: CGFloat = 480
+    static let maxHeight: CGFloat = 640
 
     /// Total panel size: the union of every mode.
     var panel: CGSize { CGSize(width: expandedWidth + flare * 2, height: Self.maxHeight) }
@@ -58,7 +58,7 @@ struct IslandLayout: Equatable {
         switch mode {
         case .compact: compact
         case .expanded: CGSize(width: expandedWidth, height: expandedHeight)
-        case .detail: CGSize(width: expandedWidth, height: min(detailHeight, Self.maxHeight))
+        case .detail: CGSize(width: expandedWidth, height: min(detailHeight, Self.maxHeight - 110))
         }
     }
 
@@ -68,8 +68,8 @@ struct IslandLayout: Equatable {
             return IslandLayout(
                 anchor: anchor,
                 compact: CGSize(width: width + 2 * 46, height: height),
-                expandedWidth: max(360, width + 2 * 46),
-                expandedHeight: 216,
+                expandedWidth: max(440, width + 2 * 46),
+                expandedHeight: 304,
                 flare: 12,
                 cornerRadius: 14
             )
@@ -77,8 +77,8 @@ struct IslandLayout: Equatable {
             return IslandLayout(
                 anchor: anchor,
                 compact: CGSize(width: anchor.compactGap + 2 * 46, height: height),
-                expandedWidth: 360,
-                expandedHeight: 216 - 33,
+                expandedWidth: 440,
+                expandedHeight: 304 - 33,
                 flare: 12,
                 cornerRadius: 14
             )

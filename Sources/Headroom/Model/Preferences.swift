@@ -23,6 +23,7 @@ enum ProviderVisibility: String, Codable, CaseIterable {
 @Observable
 final class Preferences {
     private struct Stored: Codable {
+        var alerts: [ProviderID: AlertOptions]?
         var visibility: [ProviderID: ProviderVisibility] = [:]
         var order: [ProviderID] = ProviderID.allCases
         var hideInFullScreen = false
@@ -31,13 +32,15 @@ final class Preferences {
         var didCompleteFirstRun = false
     }
 
+    private let defaults: UserDefaults
     private static let key = "headroom.preferences"
     private var stored: Stored {
         didSet { persist() }
     }
 
-    init() {
-        if let data = UserDefaults.standard.data(forKey: Self.key),
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        if let data = defaults.data(forKey: Self.key),
            let decoded = try? JSONDecoder().decode(Stored.self, from: data) {
             stored = decoded
         } else {
@@ -49,7 +52,7 @@ final class Preferences {
 
     private func persist() {
         if let data = try? JSONEncoder().encode(stored) {
-            UserDefaults.standard.set(data, forKey: Self.key)
+            defaults.set(data, forKey: Self.key)
         }
     }
 
@@ -70,6 +73,14 @@ final class Preferences {
         var order = stored.order
         order.move(fromOffsets: source, toOffset: destination)
         stored.order = order
+    }
+
+    func alertOptions(_ id: ProviderID) -> AlertOptions { stored.alerts?[id] ?? AlertOptions() }
+
+    func setAlertOptions(_ options: AlertOptions, for id: ProviderID) {
+        var alerts = stored.alerts ?? [:]
+        alerts[id] = options
+        stored.alerts = alerts
     }
 
     // MARK: - Behavior
