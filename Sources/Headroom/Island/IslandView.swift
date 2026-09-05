@@ -10,6 +10,7 @@ struct IslandView: View {
     var onSelect: (ProviderID?) -> Void = { _ in }
     var onOpenSettings: () -> Void = {}
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var shape: IslandShape {
         IslandShape(cornerRadius: state.layout.cornerRadius, flare: state.layout.flare)
@@ -65,10 +66,10 @@ struct IslandView: View {
             compactContent
         case .expanded:
             expandedContent
-                .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .top)))
+                .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.96, anchor: .top)))
         case let .detail(id):
             detailContent(id)
-                .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .top)))
+                .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.96, anchor: .top)))
         }
     }
 
@@ -94,6 +95,8 @@ struct IslandView: View {
 
     private func dot(_ id: ProviderID) -> some View {
         ProviderDot(state: model.state(id), status: model.status(id))
+            .accessibilityLabel("\(id.displayName), \(model.state(id)?.freshness(at: model.now) ?? "Not signed in")")
+            .accessibilityValue(model.state(id)?.snapshot?.ringRemainingPercent.map { "\(Int($0.rounded())) percent remaining" } ?? "Quota unavailable")
             .foregroundStyle(Color.white)
     }
 
@@ -107,20 +110,23 @@ struct IslandView: View {
                 VStack(spacing: 8) {
                     Text("Headroom")
                         .font(.system(size: 15, weight: .semibold, design: .rounded))
-                    Text("No AI logins found — sign in with `claude`, `codex`, `grok`, or the Cursor app and the ring appears within a few minutes.")
+                    Text("Connect Claude, Codex, Grok, or Cursor in Settings to see your available quota.")
                         .font(.system(size: 11.5))
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.horizontal, 24)
-                    Button("Settings…", action: onOpenSettings)
+                    Button("Set up providers…", action: onOpenSettings)
                         .controlSize(.small)
                         .buttonStyle(.glass)
                         .padding(.top, 2)
+                    Button("Check again") { model.refreshAll() }
+                        .controlSize(.small)
+                        .disabled(model.isAnyRefreshing)
                 }
                 .padding(.top, 16)
             } else {
-                HStack(alignment: .top, spacing: 28) {
+                HStack(alignment: .top, spacing: 12) {
                     ForEach(providers) { id in
                         Button {
                             onSelect(id)
@@ -130,7 +136,25 @@ struct IslandView: View {
                                 Text(id.displayName)
                                     .font(.system(size: 11, weight: .medium))
                                     .foregroundStyle(.secondary)
+                                if let window = model.state(id)?.snapshot?.limitingWindow,
+                                   model.status(id) != .expired {
+                                    Text(window.title)
+                                        .font(.system(size: 10, weight: .medium))
+                                        .lineLimit(2)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                    Text(window.resetsAt.map { $0 > model.now ? "Resets in \(Formatting.countdown(to: $0, from: model.now))" : "Awaiting reset" } ?? "Reset not reported")
+                                        .font(.system(size: 9.5))
+                                        .foregroundStyle(.secondary)
+                                        .lineLimit(2)
+                                }
+                                Text(model.state(id)?.freshness(at: model.now) ?? "Not signed in")
+                                    .font(.system(size: 9.5))
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(3)
+                                    .fixedSize(horizontal: false, vertical: true)
                             }
+                            .multilineTextAlignment(.center)
+                            .frame(width: 90)
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(LiftButtonStyle())
@@ -169,17 +193,21 @@ struct IslandView: View {
     private func detailContent(_ id: ProviderID) -> some View {
         VStack(spacing: 0) {
             notchSpacer
-            DetailView(
-                provider: id,
-                state: model.state(id),
-                status: model.status(id),
-                now: model.now,
-                spend: model.spend[id],
-                onBack: { onSelect(nil) }
-            )
-            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
-                state.detailHeight = height + state.layout.anchor.notchHeight
+            ScrollView {
+                DetailView(
+                    provider: id,
+                    state: model.state(id),
+                    status: model.status(id),
+                    now: model.now,
+                    spend: model.spend[id],
+                    model: model,
+                    onBack: { onSelect(nil) }
+                )
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
+                    state.detailHeight = height + state.layout.anchor.notchHeight
+                }
             }
+            .scrollBounceBehavior(.basedOnSize)
         }
         .frame(width: state.layout.expandedWidth, alignment: .top)
         .frame(height: state.currentSize.height, alignment: .top)
@@ -193,11 +221,12 @@ struct IslandView: View {
 
 /// Tokenly's hover lift / press squash.
 struct LiftButtonStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var hovering = false
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .scaleEffect(configuration.isPressed ? 0.94 : (hovering ? 1.08 : 1))
+            .scaleEffect(reduceMotion ? 1 : (configuration.isPressed ? 0.94 : (hovering ? 1.08 : 1)))
             .animation(Motion.lift, value: configuration.isPressed)
             .animation(Motion.lift, value: hovering)
             .onHover { hovering = $0 }

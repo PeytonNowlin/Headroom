@@ -34,6 +34,7 @@ public struct ProviderState: Sendable, Equatable {
     public var lastError: String?
     public var consecutiveFailures: Int
     public var isRefreshing: Bool
+    public var isRestored: Bool
     /// Whether any credential source exists locally, independent of whether a refresh has
     /// succeeded. A provider with credentials stays visible even while every refresh fails.
     public var hasCredentials: Bool
@@ -44,12 +45,13 @@ public struct ProviderState: Sendable, Equatable {
 
     public init(provider: ProviderID, snapshot: Snapshot? = nil, lastError: String? = nil,
                 consecutiveFailures: Int = 0, isRefreshing: Bool = false, hasCredentials: Bool = false,
-                rateLimitedUntil: Date? = nil, nextRefreshAt: Date? = nil) {
+                rateLimitedUntil: Date? = nil, nextRefreshAt: Date? = nil, isRestored: Bool = false) {
         self.provider = provider
         self.snapshot = snapshot
         self.lastError = lastError
         self.consecutiveFailures = consecutiveFailures
         self.isRefreshing = isRefreshing
+        self.isRestored = isRestored
         self.hasCredentials = hasCredentials
         self.rateLimitedUntil = rateLimitedUntil
         self.nextRefreshAt = nextRefreshAt
@@ -65,6 +67,20 @@ public struct ProviderState: Sendable, Equatable {
     /// Three missed polls before a snapshot reads as stale.
     public static let stalenessWindow: TimeInterval = 3 * ProviderPoller.defaultInterval
 
+    /// A user-facing description that never presents a saved value as a successful live check.
+    public func freshness(at now: Date) -> String {
+        if snapshot?.status == .expired { return "Login expired" }
+        if isRefreshing { return snapshot == nil ? "Checking login…" : "Refreshing · showing saved usage" }
+        if isRateLimited(at: now) { return snapshot == nil ? "Provider rate limited" : "Rate limited · showing saved usage" }
+        if lastError != nil { return snapshot == nil ? "Provider unavailable" : "Refresh failed · showing saved usage" }
+        if let snapshot, snapshot.status != .absent {
+            let age = max(0, now.timeIntervalSince(snapshot.fetchedAt))
+            let checked = age < 60 ? "Checked just now" : "Last checked \(Formatting.countdown(to: now, from: snapshot.fetchedAt)) ago"
+            return status(at: now) == .stale ? "Saved usage · \(checked.lowercased())" : checked
+        }
+        return hasCredentials ? "Login found · waiting to check" : "Not signed in"
+    }
+
     /// Connection status at `now`, folding staleness in.
     public func status(at now: Date) -> ConnectionStatus {
         guard let snapshot else { return .absent }
@@ -72,7 +88,7 @@ public struct ProviderState: Sendable, Equatable {
         case .absent, .expired:
             return snapshot.status
         case .connected, .stale:
-            return now.timeIntervalSince(snapshot.fetchedAt) > Self.stalenessWindow ? .stale : .connected
+            return isRestored || now.timeIntervalSince(snapshot.fetchedAt) > Self.stalenessWindow ? .stale : .connected
         }
     }
 }
@@ -107,7 +123,7 @@ public actor ProviderPoller {
         // refresh publishes the real answer before it makes any request.
         self.state = ProviderState(provider: runtime.id, snapshot: initialSnapshot,
                                    hasCredentials: initialSnapshot.map { $0.status != .absent } ?? false,
-                                   rateLimitedUntil: rateLimitedUntil)
+                                   rateLimitedUntil: rateLimitedUntil, isRestored: initialSnapshot != nil)
         var cont: AsyncStream<ProviderState>.Continuation?
         self.states = AsyncStream(bufferingPolicy: .bufferingNewest(8)) { cont = $0 }
         self.continuation = cont
@@ -173,6 +189,7 @@ public actor ProviderPoller {
             HeadroomLog.polling.info("\(self.runtime.id.rawValue, privacy: .public) refreshed: \(String(describing: snapshot.status), privacy: .public), \(snapshot.windows.count) windows")
             publish {
                 $0.snapshot = snapshot
+                $0.isRestored = false
                 $0.lastError = nil
                 $0.consecutiveFailures = 0
                 $0.isRefreshing = false

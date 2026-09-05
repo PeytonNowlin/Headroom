@@ -58,9 +58,9 @@ struct AlertTests {
         #expect(second.map(\.kind) == [.threshold(95)])
         #expect(AlertEvaluator.evaluate(snapshot(99, at: now), now: now, ledger: &ledger).isEmpty)
 
-        // Jumping straight past both fires both, in order.
+        // Jumping past both emits the most severe warning once.
         var fresh = AlertLedger()
-        #expect(AlertEvaluator.evaluate(snapshot(97, at: now), now: now, ledger: &fresh).map(\.kind) == [.threshold(80), .threshold(95)])
+        #expect(AlertEvaluator.evaluate(snapshot(97, at: now), now: now, ledger: &fresh).map(\.kind) == [.threshold(95)])
     }
 
     @Test("a new reset time re-arms the window")
@@ -76,15 +76,20 @@ struct AlertTests {
         #expect(ledger.fired.count == 1)  // old cycle pruned
     }
 
-    @Test("pace exhaustion fires once, and only when projected before reset")
-    func pace() {
+    @Test("pace warnings require recent observations and fire only once")
+    func pace() throws {
         var ledger = AlertLedger()
-        let half = reset.addingTimeInterval(-week / 2)
-        #expect(AlertEvaluator.evaluate(snapshot(40, at: half), now: half, ledger: &ledger).isEmpty)
-        let alerts = AlertEvaluator.evaluate(snapshot(60, at: half), now: half, ledger: &ledger)
+        let now = reset.addingTimeInterval(-week / 2)
+        #expect(AlertEvaluator.evaluate(snapshot(60, at: now), now: now, ledger: &ledger).isEmpty)
+        var history = UsageHistory()
+        for (offset, used) in [(600.0, 58.0), (300.0, 59.0), (0.0, 60.0)] {
+            history.record(snapshot(used, at: now.addingTimeInterval(-offset)))
+        }
+        let forecast = try #require(Pace.forecast(weekly(used: 60), provider: .claude, history: history, now: now))
+        let alerts = AlertEvaluator.evaluate(snapshot(60, at: now), now: now, ledger: &ledger, forecasts: ["weekly": forecast])
         #expect(alerts.map(\.kind) == [.paceExhaustion])
-        #expect(alerts[0].message.contains("run out ~1d 4h early"))
-        #expect(AlertEvaluator.evaluate(snapshot(65, at: half), now: half, ledger: &ledger).isEmpty)
+        #expect(try #require(alerts.first).message.contains("recent pace may run out"))
+        #expect(AlertEvaluator.evaluate(snapshot(60, at: now), now: now, ledger: &ledger, forecasts: ["weekly": forecast]).isEmpty)
     }
 
     @Test("expired and absent snapshots never alert")

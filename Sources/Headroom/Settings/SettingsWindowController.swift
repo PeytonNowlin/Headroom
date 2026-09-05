@@ -23,7 +23,7 @@ final class SettingsWindowController {
             window.titleVisibility = .hidden
             window.isMovableByWindowBackground = true
             window.isReleasedWhenClosed = false
-            window.setContentSize(NSSize(width: 440, height: 620))
+            window.setContentSize(NSSize(width: 520, height: 720))
             window.center()
             self.window = window
         }

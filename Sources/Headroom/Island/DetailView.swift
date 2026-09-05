@@ -1,45 +1,30 @@
 import HeadroomCore
 import SwiftUI
 
-/// One provider's drill-in: header, a row per quota window, extra usage, and (later) spend.
+/// One provider’s quotas, connection actions, forecasts, and estimated token value.
 struct DetailView: View {
     let provider: ProviderID
     let state: ProviderState?
     let status: ConnectionStatus
     let now: Date
     var spend: SpendSummary?
+    var model: UsageModel
     let onBack: () -> Void
-
-    @Environment(\.colorScheme) private var scheme
 
     private var snapshot: Snapshot? { state?.snapshot }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             header
+            ConnectionView(provider: provider, state: state, now: now) { model.refresh(provider) }
             switch status {
-            case .expired:
-                reconnect
-            case .absent:
-                if let error = state?.lastError {
-                    HStack(spacing: 8) {
-                        Image(systemName: "exclamationmark.triangle")
-                            .foregroundStyle(.secondary)
-                        Text(error == "Rate limited" ? "Rate limited by the provider — retrying shortly" : "Couldn't reach the provider — \(error)")
-                            .font(.system(size: 12))
-                            .foregroundStyle(.secondary)
-                    }
-                    .padding(.vertical, 6)
-                } else {
-                    Text("Not signed in")
-                        .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
-                }
+            case .expired, .absent:
+                EmptyView()
             case .connected, .stale:
                 if let snapshot {
                     VStack(spacing: 8) {
                         ForEach(snapshot.windows) { window in
-                            WindowRow(window: window, now: now)
+                            WindowRow(window: window, now: now, forecast: model.forecast(window, provider: provider))
                         }
                     }
                     if let note = snapshot.note {
@@ -49,7 +34,7 @@ struct DetailView: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     if let extra = snapshot.extraUsage {
-                        LabeledRow(title: "Extra Usage", value: Formatting.extraUsage(extra))
+                        LabeledRow(title: "Provider-reported extra usage", value: Formatting.extraUsage(extra))
                     }
                     if let credits = snapshot.resetCredits {
                         LabeledRow(title: "Rate Limit Resets", value: credits == 1 ? "1 available" : "\(credits) available")
@@ -57,6 +42,17 @@ struct DetailView: View {
                 } else {
                     ProgressView().controlSize(.small)
                 }
+            }
+            if model.preferences.alertOptions(provider).warningsEnabled,
+               snapshot?.windows.contains(where: { ($0.resetsAt.map { $0 > now } ?? false) }) == true {
+                Button(model.alertsSnoozed(provider) ? "Resume quota warnings" : "Snooze warnings until reset") {
+                    if model.alertsSnoozed(provider) { model.resumeAlerts(provider) }
+                    else { model.snoozeAlerts(provider) }
+                }
+                .font(.system(size: 11))
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+                .help("Each current quota window stays snoozed until its own reset. Quota-return alerts remain enabled if selected.")
             }
             if let spend {
                 SpendTiles(summary: spend)
@@ -66,7 +62,6 @@ struct DetailView: View {
         .padding(.horizontal, 18)
         .padding(.top, 10)
         .padding(.bottom, 16)
-        .opacity(status == .stale ? 0.7 : 1)
     }
 
     private var header: some View {
@@ -95,14 +90,11 @@ struct DetailView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityLabel("Back to all providers")
     }
 
     private var refreshLine: String {
         var parts: [String] = []
-        if let fetched = snapshot?.fetchedAt {
-            let age = now.timeIntervalSince(fetched)
-            parts.append(age < 60 ? "updated just now" : "updated \(Formatting.countdown(to: now, from: fetched)) ago")
-        }
         if state?.isRefreshing == true {
             parts.append("refreshing")
         } else if let next = state?.nextRefreshAt {
@@ -111,23 +103,13 @@ struct DetailView: View {
         }
         return parts.joined(separator: " · ")
     }
-
-    private var reconnect: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "exclamationmark.circle")
-                .foregroundStyle(.secondary)
-            Text(provider.reconnectHint)
-                .font(.system(size: 12))
-                .foregroundStyle(.secondary)
-        }
-        .padding(.vertical, 6)
-    }
 }
 
 /// A quota window: title, draining capsule bar, percent left, and reset countdown.
 struct WindowRow: View {
     let window: QuotaWindow
     let now: Date
+    var forecast: Pace.Forecast?
     @Environment(\.colorScheme) private var scheme
 
     private var urgency: Urgency { Urgency(usedPercent: window.usedPercent) }
@@ -152,16 +134,26 @@ struct WindowRow: View {
                 }
             }
             .frame(height: 5)
-            HStack {
-                Text(resetText)
-                Spacer()
-                if let projection = Pace.project(window, now: now) {
-                    Text(Pace.hint(projection, now: now))
-                        .foregroundStyle(paceIsBad(projection) ? urgencyWarn : .secondary)
+            Text(resetText)
+                .font(.system(size: 10.5))
+                .foregroundStyle(.secondary)
+            if let forecast {
+                Text(forecast.isVariable ? "Usage is bursty · forecast uncertain" : "Recent pace: \(Pace.hint(forecast.recent, now: now))")
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(!forecast.isVariable && paceIsBad(forecast.recent) ? urgencyWarn : .secondary)
+                if let whole = forecast.wholeWindow {
+                    Text("Whole-window average: \(Pace.hint(whole, now: now))")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
                 }
+                Text("Based on ~\(Int(forecast.observationDuration / 60))m of observations; assumes this pace continues.")
+                    .font(.system(size: 9.5))
+                    .foregroundStyle(.secondary)
+            } else {
+                Text(window.remainingPercent == 0 ? "Quota exhausted · waiting for reset" : "Not enough recent data to forecast")
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(.secondary)
             }
-            .font(.system(size: 10.5))
-            .foregroundStyle(.secondary)
         }
     }
 
@@ -175,7 +167,7 @@ struct WindowRow: View {
     private var resetText: String {
         guard window.isStarted else { return "Not started — begins with your first message" }
         guard let resets = window.resetsAt else { return "" }
-        return "Resets in \(Formatting.countdown(to: resets, from: now))"
+        return resets > now ? "Resets in \(Formatting.countdown(to: resets, from: now))" : "Reset time passed · awaiting provider confirmation"
     }
 }
 

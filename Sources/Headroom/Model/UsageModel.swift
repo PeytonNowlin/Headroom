@@ -17,6 +17,7 @@ final class UsageModel {
     /// The banner currently showing, if any; further alerts queue behind it.
     private(set) var activeAlert: UsageAlert?
     private var alertQueue: [UsageAlert] = []
+    private(set) var usageHistory: UsageHistory
     private var alertLedger: AlertLedger
     private var bannerTask: Task<Void, Never>?
 
@@ -31,10 +32,17 @@ final class UsageModel {
 
     init(environment: HostEnvironment = .live(), preferences: Preferences = Preferences()) {
         self.environment = environment
+        self.now = environment.now()
         self.preferences = preferences
         pricing = PricingStore(environment: environment)
         cursorSpend = CursorSpendSource(environment: environment)
         alertLedger = Self.loadLedger(environment)
+        if let data = try? environment.readFile(environment.dataDirectory.appending(path: "quota-history.json")),
+           let history = try? JSONDecoder().decode(UsageHistory.self, from: data) {
+            usageHistory = history
+        } else {
+            usageHistory = UsageHistory()
+        }
         let runtimes: [any ProviderRuntime] = [
             ClaudeProvider(environment: environment),
             CodexProvider(environment: environment),
@@ -56,17 +64,22 @@ final class UsageModel {
             // Mirrors the poller's seed; the first poll corrects it off the main thread.
             states[runtime.id] = ProviderState(provider: runtime.id, snapshot: entry?.snapshot,
                                                hasCredentials: entry?.snapshot.map { $0.status != .absent } ?? false,
-                                               rateLimitedUntil: entry?.rateLimitedUntil)
+                                               rateLimitedUntil: entry?.rateLimitedUntil, isRestored: entry?.snapshot != nil)
             tasks.append(Task { [weak self] in
                 for await state in poller.states {
                     guard let self else { return }
+                    self.now = self.environment.now()
                     let previous = self.states[state.provider]
                     self.states[state.provider] = state
                     if state.snapshot != previous?.snapshot || state.rateLimitedUntil != previous?.rateLimitedUntil {
                         self.persistSnapshots()
                     }
                     if let snapshot = state.snapshot, snapshot != previous?.snapshot {
-                        self.evaluateAlerts(snapshot)
+                        self.usageHistory.record(snapshot)
+                        if let data = try? JSONEncoder().encode(self.usageHistory) {
+                            try? self.environment.writeFile(self.environment.dataDirectory.appending(path: "quota-history.json"), data)
+                        }
+                        self.evaluateAlerts(snapshot, previous: previous?.snapshot)
                     }
                 }
             })
@@ -74,7 +87,7 @@ final class UsageModel {
         tasks.append(Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(1))
-                self?.now = Date()
+                if let self { self.now = self.environment.now() }
             }
         })
     }
@@ -96,6 +109,53 @@ final class UsageModel {
             Task { await poller.refreshNow() }
         }
         Task { await rescanSpend() }
+    }
+
+    func refresh(_ provider: ProviderID) {
+        Task { await pollers[provider]?.refreshNow() }
+    }
+
+    func forecast(_ window: QuotaWindow, provider: ProviderID) -> Pace.Forecast? {
+        guard let state = states[provider], state.lastError == nil,
+              state.status(at: now) == .connected else { return nil }
+        return Pace.forecast(window, provider: provider, history: usageHistory, now: now)
+    }
+
+    func setAlertOptions(_ options: AlertOptions, for provider: ProviderID) {
+        preferences.setAlertOptions(options, for: provider)
+        alertQueue.removeAll { $0.provider == provider && !allowsAlert($0) }
+        if let activeAlert, activeAlert.provider == provider, !allowsAlert(activeAlert) { dismissAlert() }
+    }
+
+    func snoozeAlerts(_ provider: ProviderID) {
+        guard let snapshot = states[provider]?.snapshot else { return }
+        var options = preferences.alertOptions(provider)
+        options.snooze(snapshot)
+        setAlertOptions(options, for: provider)
+    }
+
+    func resumeAlerts(_ provider: ProviderID) {
+        var options = preferences.alertOptions(provider)
+        options.snoozedCycles = []
+        setAlertOptions(options, for: provider)
+    }
+
+    func alertsSnoozed(_ provider: ProviderID) -> Bool {
+        let options = preferences.alertOptions(provider)
+        return states[provider]?.snapshot?.windows.contains {
+            ($0.resetsAt.map { $0 > now } ?? false) && options.isSnoozed(provider: provider, window: $0)
+        } ?? false
+    }
+
+    private func allowsAlert(_ alert: UsageAlert) -> Bool {
+        let options = preferences.alertOptions(alert.provider)
+        guard now.timeIntervalSince(alert.firedAt) < 10 * 60,
+              let window = states[alert.provider]?.snapshot?.windows.first(where: { $0.id == alert.windowID }),
+              window.resetsAt == alert.resetsAt,
+              window.resetsAt.map({ $0 > now }) ?? true else { return false }
+        if alert.kind == .quotaReturned { return options.notifyOnReset }
+        guard options.warningsEnabled else { return false }
+        return !options.isSnoozed(provider: alert.provider, window: window)
     }
 
     private func rescanSpend() async {
@@ -136,17 +196,24 @@ final class UsageModel {
         return ledger
     }
 
-    private func evaluateAlerts(_ snapshot: Snapshot) {
-        let alerts = AlertEvaluator.evaluate(snapshot, now: environment.now(), ledger: &alertLedger)
+    private func evaluateAlerts(_ snapshot: Snapshot, previous: Snapshot?) {
+        let forecasts = Dictionary(uniqueKeysWithValues: snapshot.windows.compactMap { window in
+            forecast(window, provider: snapshot.provider).map { (window.id, $0) }
+        })
+        let alerts = AlertEvaluator.evaluate(snapshot, now: environment.now(), ledger: &alertLedger,
+                                            previous: previous, options: preferences.alertOptions(snapshot.provider),
+                                            forecasts: forecasts)
         if let data = try? JSONEncoder().encode(alertLedger) {
             try? environment.writeFile(environment.dataDirectory.appending(path: Self.ledgerFile), data)
         }
+        if let activeAlert, !allowsAlert(activeAlert) { dismissAlert() }
         guard !alerts.isEmpty else { return }
         alertQueue.append(contentsOf: alerts)
         showNextAlert()
     }
 
     private func showNextAlert() {
+        alertQueue.removeAll { !allowsAlert($0) }
         guard activeAlert == nil, !alertQueue.isEmpty else { return }
         activeAlert = alertQueue.removeFirst()
         bannerTask?.cancel()

@@ -11,6 +11,7 @@ struct RingView: View {
     var lineWidth: CGFloat = 3.5
 
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var pulse = false
     @State private var spin = false
 
@@ -38,7 +39,9 @@ struct RingView: View {
                         .trim(from: 0, to: 0.23)
                         .stroke(.secondary, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
                         .rotationEffect(.degrees(spin ? 360 : 0))
-                        .onAppear {
+                        .task(id: reduceMotion) {
+                            spin = false
+                            guard !reduceMotion else { return }
                             withAnimation(.linear(duration: 1.1).repeatForever(autoreverses: false)) { spin = true }
                         }
                 } else if let remaining, let urgency {
@@ -48,11 +51,10 @@ struct RingView: View {
                         .rotationEffect(.degrees(-90))
                         .opacity(urgency.pulses && pulse ? 0.4 : 1)
                         .animation(Motion.ringSweep, value: remaining)
-                        .onChange(of: urgency.pulses, initial: true) { _, pulses in
-                            if pulses {
+                        .task(id: urgency.pulses && !reduceMotion) {
+                            pulse = false
+                            if urgency.pulses && !reduceMotion {
                                 withAnimation(.easeInOut(duration: 1).repeatForever(autoreverses: true)) { pulse = true }
-                            } else {
-                                withAnimation(.default) { pulse = false }
                             }
                         }
                 }
@@ -67,7 +69,18 @@ struct RingView: View {
                 .monospacedDigit()
         }
         .opacity(status == .stale ? 0.6 : 1)
-        .accessibilityLabel("\(provider.displayName) \(label) remaining")
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(provider.displayName)
+        .accessibilityValue(accessibilityStatus)
+    }
+
+    private var accessibilityStatus: String {
+        if status == .expired { return "Login expired" }
+        if isErrored { return "Provider unavailable" }
+        if isLoading { return "Checking usage" }
+        guard let remaining else { return "Quota unavailable" }
+        let saved = status == .stale || state?.lastError != nil ? ", showing saved usage" : ""
+        return "\(Int(remaining.rounded())) percent remaining\(saved)"
     }
 
     private var well: some View {
@@ -105,10 +118,23 @@ struct ProviderDot: View {
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        Circle()
-            .fill(Self.color(state: state, status: status, scheme: scheme) ?? .clear)
-            .frame(width: 6, height: 6)
-            .opacity(status == .stale ? 0.6 : 1)
+        let color = Self.color(state: state, status: status, scheme: scheme) ?? .clear
+        let used = state?.snapshot?.ringUsedPercent ?? 0
+        Group {
+            if status == .expired || state?.lastError != nil || used >= 90 {
+                Text("!").font(.system(size: 9, weight: .heavy))
+            } else if used >= 70 {
+                Capsule().frame(width: 7, height: 3)
+            } else if used >= 40 {
+                Circle().strokeBorder(lineWidth: 1.5).frame(width: 6, height: 6)
+            } else {
+                Circle().frame(width: 6, height: 6)
+            }
+        }
+        .foregroundStyle(color)
+        .frame(width: 7, height: 10)
+        .accessibilityElement(children: .ignore)
+        .opacity(status == .stale ? 0.6 : 1)
     }
 
     /// Nil means "no dot": there is no quota to summarize (e.g. a Grok Business login, which
