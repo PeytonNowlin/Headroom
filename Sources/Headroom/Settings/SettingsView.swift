@@ -5,11 +5,15 @@ import SwiftUI
 struct SettingsView: View {
     var model: UsageModel
     @Bindable var preferences: Preferences
+    var updater: UpdateController?
+    var notifications: NotificationController?
+    var onOpenTrends: () -> Void = {}
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
+                updates
                 providers
                 connections
                 alerts
@@ -22,6 +26,27 @@ struct SettingsView: View {
         .frame(width: 520)
         .frame(minHeight: 520, idealHeight: 620)
         .background(.regularMaterial)
+    }
+
+    @ViewBuilder
+    private var updates: some View {
+        if let updater {
+            Section("App updates", footnote: "Update downloads are verified before installation. You choose when to install and restart.") {
+                VStack(alignment: .leading, spacing: 10) {
+                    Button("Check for Updates…") { updater.checkForUpdates() }
+                        .disabled(!updater.canCheck)
+                    Toggle("Automatically check for updates", isOn: Binding(
+                        get: { updater.automaticallyChecks },
+                        set: { updater.setAutomaticallyChecks($0) }
+                    ))
+                    .disabled(!updater.isAvailable)
+                    Button("Usage Trends…", action: onOpenTrends)
+                }
+                .font(.system(size: 12))
+                .toggleStyle(.switch)
+                .controlSize(.small)
+            }
+        }
     }
 
     // MARK: - Providers
@@ -61,6 +86,19 @@ struct SettingsView: View {
     private var alerts: some View {
         Section("Quota alerts", footnote: "Warnings appear at 80% and 95% used, or when a steady recent pace may exhaust quota. Quota-return banners require a confirmed reset after usage reached 80%. Snooze applies to each current window until its own reset.") {
             VStack(alignment: .leading, spacing: 14) {
+                if let notifications {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Toggle("Also send macOS notifications", isOn: Binding(
+                            get: { notifications.enabled },
+                            set: { enabled in Task { await notifications.setEnabled(enabled) } }
+                        ))
+                        .disabled(notifications.permissionRequestInFlight)
+                        Text(notifications.statusText).font(.caption).foregroundStyle(.secondary)
+                        Button("Notification Settings…") { notifications.openSystemSettings() }
+                            .buttonStyle(.link)
+                    }
+                    Divider()
+                }
                 ForEach(preferences.order) { id in
                     VStack(alignment: .leading, spacing: 6) {
                         Text(id.displayName).fontWeight(.medium)
@@ -72,7 +110,7 @@ struct SettingsView: View {
                                 model.setAlertOptions(options, for: id)
                             }
                         ))
-                        Toggle("Banner when quota returns", isOn: Binding(
+                        Toggle("Alert when quota returns", isOn: Binding(
                             get: { preferences.alertOptions(id).notifyOnReset },
                             set: { value in
                                 var options = preferences.alertOptions(id)

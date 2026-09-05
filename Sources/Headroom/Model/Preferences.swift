@@ -24,6 +24,7 @@ enum ProviderVisibility: String, Codable, CaseIterable {
 final class Preferences {
     private struct Stored: Codable {
         var alerts: [ProviderID: AlertOptions]?
+        var systemNotifications: Bool?
         var visibility: [ProviderID: ProviderVisibility] = [:]
         var order: [ProviderID] = ProviderID.allCases
         var hideInFullScreen = false
@@ -81,6 +82,11 @@ final class Preferences {
         var alerts = stored.alerts ?? [:]
         alerts[id] = options
         stored.alerts = alerts
+    }
+
+    var systemNotifications: Bool {
+        get { stored.systemNotifications ?? false }
+        set { stored.systemNotifications = newValue }
     }
 
     // MARK: - Behavior

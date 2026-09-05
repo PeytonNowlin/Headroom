@@ -21,8 +21,14 @@ BIN=".build/apple/Products/$XCODE_CONFIG"
 APP="build/Headroom.app"
 
 rm -rf "$APP"
-mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
+mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$APP/Contents/Frameworks"
 cp "$BIN/Headroom" "$APP/Contents/MacOS/Headroom"
+SPARKLE=".build/artifacts/sparkle/Sparkle/Sparkle.xcframework/macos-arm64_x86_64/Sparkle.framework"
+ditto "$SPARKLE" "$APP/Contents/Frameworks/Sparkle.framework"
+cp .build/artifacts/sparkle/Sparkle/LICENSE "$APP/Contents/Resources/Sparkle-LICENSE"
+if ! otool -l "$APP/Contents/MacOS/Headroom" | grep -Fq '@executable_path/../Frameworks'; then
+  install_name_tool -add_rpath '@executable_path/../Frameworks' "$APP/Contents/MacOS/Headroom"
+fi
 for bundle in "$BIN"/*.bundle; do
   [ -d "$bundle" ] && cp -R "$bundle" "$APP/Contents/Resources/"
 done

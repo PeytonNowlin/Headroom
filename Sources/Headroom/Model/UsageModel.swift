@@ -9,6 +9,14 @@ import Observation
 final class UsageModel {
     private(set) var states: [ProviderID: ProviderState] = [:]
     private(set) var spend: [ProviderID: SpendSummary] = [:]
+    private(set) var trends: [ProviderID: [SpendPeriod: SpendTrend]] = [:]
+    var onAlert: ((UsageAlert) -> Void)?
+    private var visibleSurfaces: Set<String> = []
+    private var clockTask: Task<Void, Never>?
+    private var spendTimerTask: Task<Void, Never>?
+    private var started = false
+    private var spendScanTask: Task<Void, Never>?
+    private var lastSpendScanAt: Date?
     /// Providers the last rescan expected spend from: local logs, or a Cursor login. Captured
     /// there, never derived in a view: the checks behind it shell out (sqlite3, security) and
     /// must stay off the main thread and out of SwiftUI body evaluation.
@@ -84,31 +92,67 @@ final class UsageModel {
                 }
             })
         }
-        tasks.append(Task { [weak self] in
+        restartClock()
+    }
+
+    var localScanInterval: Duration { visibleSurfaces.isEmpty ? .seconds(300) : Self.spendInterval }
+
+    var clockInterval: Duration { visibleSurfaces.isEmpty ? .seconds(60) : .seconds(1) }
+
+    func setSurfaceVisible(_ name: String, _ visible: Bool) {
+        guard visibleSurfaces.contains(name) != visible else { return }
+        let wasIdle = visibleSurfaces.isEmpty
+        if visible { visibleSurfaces.insert(name) } else { visibleSurfaces.remove(name) }
+        now = environment.now()
+        if wasIdle != visibleSurfaces.isEmpty {
+            restartClock()
+            if started { restartSpendTimer() }
+        }
+        if visible { Task { await rescanSpend() } }
+    }
+
+    private func restartClock() {
+        clockTask?.cancel()
+        let interval = clockInterval
+        clockTask = Task { [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(1))
-                if let self { self.now = self.environment.now() }
+                do { try await Task.sleep(for: interval) } catch { return }
+                guard let self else { return }
+                self.now = self.environment.now()
             }
-        })
+        }
+    }
+
+    isolated deinit {
+        clockTask?.cancel()
+        spendTimerTask?.cancel()
     }
 
     func start() {
+        guard !started else { return }
+        started = true
         for poller in pollers.values {
             Task { await poller.start() }
         }
-        tasks.append(Task(priority: .utility) { [weak self] in
+        restartSpendTimer()
+    }
+
+    private func restartSpendTimer() {
+        spendTimerTask?.cancel()
+        let interval = localScanInterval
+        spendTimerTask = Task(priority: .utility) { [weak self] in
             while !Task.isCancelled {
                 await self?.rescanSpend()
-                try? await Task.sleep(for: Self.spendInterval)
+                do { try await Task.sleep(for: interval) } catch { return }
             }
-        })
+        }
     }
 
     func refreshAll() {
         for poller in pollers.values {
             Task { await poller.refreshNow() }
         }
-        Task { await rescanSpend() }
+        Task { await rescanSpend(force: true) }
     }
 
     func refresh(_ provider: ProviderID) {
@@ -158,7 +202,22 @@ final class UsageModel {
         return !options.isSnoozed(provider: alert.provider, window: window)
     }
 
-    private func rescanSpend() async {
+    func trend(provider: ProviderID?, period: SpendPeriod) -> SpendTrend? {
+        if let provider { return trends[provider]?[period] }
+        return SpendTrend.combine(spendProviders.compactMap { trends[$0]?[period] })
+    }
+
+    func rescanSpend(force: Bool = false) async {
+        if let task = spendScanTask { await task.value; return }
+        if !force, let lastSpendScanAt, environment.now().timeIntervalSince(lastSpendScanAt) < 30 { return }
+        let task = Task { await scanSpend() }
+        spendScanTask = task
+        await task.value
+        lastSpendScanAt = environment.now()
+        spendScanTask = nil
+    }
+
+    private func scanSpend() async {
         let table = await pricing.refreshIfNeeded()
         let calendar = environment.calendar
         var expected: [ProviderID] = []
@@ -166,14 +225,25 @@ final class UsageModel {
             guard scanner.hasLogs() else { continue }
             expected.append(id)
             let ledger = await scanner.scan()
-            spend[id] = SpendSummarizer.summarize(ledger, pricing: table, now: environment.now(), calendar: calendar)
+            updateSpend(ledger, for: id, pricing: table, calendar: calendar)
         }
         // `ledger()` is nil only without a login; the token read happens inside the actor.
         if let ledger = await cursorSpend.ledger() {
             expected.append(.cursor)
-            spend[.cursor] = SpendSummarizer.summarize(ledger, pricing: table, now: environment.now(), calendar: calendar)
+            updateSpend(ledger, for: .cursor, pricing: table, calendar: calendar)
         }
+        spend = spend.filter { expected.contains($0.key) }
+        trends = trends.filter { expected.contains($0.key) }
         spendProviders = expected
+    }
+
+    private func updateSpend(_ ledger: SpendLedger, for provider: ProviderID, pricing: PricingTable, calendar: Calendar) {
+        let date = environment.now()
+        spend[provider] = SpendSummarizer.summarize(ledger, pricing: pricing, now: date, calendar: calendar)
+        let updated = Dictionary(uniqueKeysWithValues: SpendPeriod.allCases.map {
+            ($0, SpendTrend.make(ledger, pricing: pricing, now: date, calendar: calendar, period: $0))
+        })
+        if trends[provider] != updated { trends[provider] = updated }
     }
 
     /// Sum across every provider with spend. Nil until a rescan has completed with all of them
@@ -208,6 +278,7 @@ final class UsageModel {
         }
         if let activeAlert, !allowsAlert(activeAlert) { dismissAlert() }
         guard !alerts.isEmpty else { return }
+        for alert in alerts where allowsAlert(alert) { onAlert?(alert) }
         alertQueue.append(contentsOf: alerts)
         showNextAlert()
     }

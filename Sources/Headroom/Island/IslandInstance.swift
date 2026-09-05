@@ -14,6 +14,8 @@ final class IslandInstance {
     var dwellTask: Task<Void, Never>?
     var hovering = false
     private var hiddenForFullScreen = false
+    var onVisibilityChange: (() -> Void)?
+    var showsCountdowns: Bool { !hiddenForFullScreen && !state.mode.isCompact }
 
     init(displayID: CGDirectDisplayID, state: IslandState, panel: IslandPanel, host: IslandHostView) {
         self.displayID = displayID
@@ -41,6 +43,7 @@ final class IslandInstance {
             state.mode = mode
         }
         host.refreshHover()
+        onVisibilityChange?()
     }
 
     /// Hide/show for full-screen spaces without tearing down state.
@@ -51,6 +54,7 @@ final class IslandInstance {
         } else {
             panel.orderFrontRegardless()
         }
+        onVisibilityChange?()
     }
 
     /// The display went away; drop the panel.

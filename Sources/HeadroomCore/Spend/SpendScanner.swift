@@ -53,6 +53,8 @@ public actor SpendScanner {
     private let environment: HostEnvironment
     private var cache: Cache
     private let cacheURL: URL
+    private var lastLedger: SpendLedger?
+    private var lastCutoffDay: String?
     static let maxAge: TimeInterval = 31 * 86400
     static let tailKeyCount = 64
 
@@ -77,6 +79,7 @@ public actor SpendScanner {
         let now = environment.now()
         let cutoff = now.addingTimeInterval(-Self.maxAge)
         var seen: Set<String> = []
+        var changed = false
 
         for root in format.roots(environment) {
             for url in environment.enumerateFiles(root, format.fileExtension) {
@@ -90,15 +93,22 @@ public actor SpendScanner {
                 if let p = progress, p.size > info.size { progress = nil }
                 // JSONSerialization leaves autoreleased objects behind; drain per file so a
                 // first full scan of hundreds of sessions doesn't balloon resident memory.
-                cache.files[path] = autoreleasepool { read(url, from: progress) }
+                let updated = autoreleasepool { read(url, from: progress) }
+                if updated.size != cache.files[path]?.size { changed = true }
+                cache.files[path] = updated
             }
         }
 
+        if !Set(cache.files.keys).isSubset(of: seen) { changed = true }
         cache.files = cache.files.filter { seen.contains($0.key) }
+        let cutoffDay = SpendLedger.dayKey(cutoff, calendar: environment.calendar)
+        if !changed, lastCutoffDay == cutoffDay, let lastLedger { return lastLedger }
         var ledger = SpendLedger()
         for progress in cache.files.values { ledger.merge(progress.ledger) }
-        ledger.dropDays(before: SpendLedger.dayKey(cutoff, calendar: environment.calendar))
-        persist()
+        ledger.dropDays(before: cutoffDay)
+        if changed { persist() }
+        lastLedger = ledger
+        lastCutoffDay = cutoffDay
         return ledger
     }
 

@@ -149,29 +149,25 @@ public struct SpendSummary: Sendable, Equatable, Codable {
 }
 
 public enum SpendSummarizer {
+    static func tile(_ models: [String: SpendLedger.ModelDay], pricing: PricingTable) -> SpendTile {
+        var tile = SpendTile(hasData: !models.isEmpty)
+        for (model, day) in models {
+            tile.tokens += day.tokens.total
+            tile.calls += day.calls
+            if day.recordedCost > 0 { tile.cost += day.recordedCost }
+            else if let price = pricing.price(for: model) { tile.cost += price.cost(of: day.tokens) }
+            else { tile.unpricedTokens += day.tokens.total }
+        }
+        return tile
+    }
+
     public static func summarize(_ ledger: SpendLedger, pricing: PricingTable, now: Date, calendar: Calendar) -> SpendSummary {
         let todayStart = calendar.startOfDay(for: now)
         func key(daysAgo n: Int) -> String {
             SpendLedger.dayKey(calendar.date(byAdding: .day, value: -n, to: todayStart)!, calendar: calendar)
         }
         func tile(_ keys: [String]) -> SpendTile {
-            var t = SpendTile()
-            for k in keys {
-                guard let models = ledger.days[k] else { continue }
-                t.hasData = true
-                for (model, day) in models {
-                    t.tokens += day.tokens.total
-                    t.calls += day.calls
-                    if day.recordedCost > 0 {
-                        t.cost += day.recordedCost
-                    } else if let price = pricing.price(for: model) {
-                        t.cost += price.cost(of: day.tokens)
-                    } else {
-                        t.unpricedTokens += day.tokens.total
-                    }
-                }
-            }
-            return t
+            keys.reduce(.empty) { $0 + Self.tile(ledger.days[$1] ?? [:], pricing: pricing) }
         }
         let last30 = (0..<30).reversed().map { key(daysAgo: $0) }
         return SpendSummary(

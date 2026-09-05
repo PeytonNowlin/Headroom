@@ -16,3 +16,8 @@ The Liquid Glass visual language, urgency color scale, ring gauge, floating
 non-activating panel technique, and callout layout are ported from Tokenly.
 
 Both projects are licensed under the MIT License; see LICENSE for the text.
+
+Sparkle — https://sparkle-project.org/
+Copyright (c) 2006 Andy Matuschak and Sparkle contributors.
+The embedded Sparkle.framework provides signed update checking and installation.
+Contents/Resources/Sparkle-LICENSE includes Sparkle's MIT license and third-party notices.
