@@ -17,6 +17,8 @@ struct ConnectionView: View {
                     .font(.system(size: 11, weight: .medium))
                 Spacer(minLength: 8)
                 Button(state?.isRefreshing == true ? "Checking…" : "Check again", action: onRetry)
+                    .focusable()
+                    .onKeyPress(keys: [.return, .space]) { _ in onRetry(); return .handled }
                     .controlSize(.small)
                     .disabled(state?.isRefreshing == true || state?.isRateLimited(at: now) == true)
                     .accessibilityLabel("Check \(provider.displayName) connection again")

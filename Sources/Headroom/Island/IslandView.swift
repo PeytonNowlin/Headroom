@@ -107,10 +107,15 @@ struct IslandView: View {
         .frame(width: state.layout.compact.width, height: state.layout.compact.height)
     }
 
+    private func quotaDescription(_ id: ProviderID) -> String {
+        guard let remaining = model.state(id)?.snapshot?.ringRemainingPercent else { return "Quota unavailable" }
+        return "\(Int(remaining.rounded())) percent remaining"
+    }
+
     private func dot(_ id: ProviderID) -> some View {
         ProviderDot(state: model.state(id), status: model.status(id))
             .accessibilityLabel("\(id.displayName), \(model.state(id)?.freshness(at: model.now) ?? "Not signed in")")
-            .accessibilityValue(model.state(id)?.snapshot?.ringRemainingPercent.map { "\(Int($0.rounded())) percent remaining" } ?? "Quota unavailable")
+            .accessibilityValue(quotaDescription(id))
             .foregroundStyle(Color.white)
     }
 
@@ -182,6 +187,8 @@ struct IslandView: View {
                                 .opacity(state.keyboardNavigation && state.focusedProvider == id ? 1 : 0)
                                 .allowsHitTesting(false)
                         }
+                        .accessibilityLabel(id.displayName)
+                        .accessibilityValue(quotaDescription(id))
                         .accessibilityHint("Open quota details for \(id.displayName)")
                     }
                 }
@@ -191,6 +198,8 @@ struct IslandView: View {
             if let total = model.totalSpend {
                 Button { onOpenTrends(nil) } label: { SpendFooter(summary: total) }
                     .buttonStyle(.plain)
+                    .focusable()
+                    .onKeyPress(keys: [.return, .space]) { _ in onOpenTrends(nil); return .handled }
                     .help("Open usage trends")
                     .accessibilityLabel("Usage trends, estimated token value")
                     .transition(.opacity)

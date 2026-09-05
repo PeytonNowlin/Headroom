@@ -137,7 +137,6 @@ final class IslandController {
         for other in instances.values { other.state.keyboardNavigation = other === instance }
         NSApp.activate()
         instance.panel.makeKeyAndOrderFront(nil)
-        instance.panel.makeFirstResponder(instance.host)
     }
 
     private func handleKey(_ event: NSEvent, on id: CGDirectDisplayID) -> Bool {

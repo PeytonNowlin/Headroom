@@ -48,11 +48,13 @@ struct DetailView: View {
             if model.preferences.alertOptions(provider).warningsEnabled,
                snapshot?.windows.contains(where: { ($0.resetsAt.map { $0 > now } ?? false) }) == true {
                 Button(model.alertsSnoozed(provider) ? "Resume quota warnings" : "Snooze warnings until reset") {
-                    if model.alertsSnoozed(provider) { model.resumeAlerts(provider) }
-                    else { model.snoozeAlerts(provider) }
+                    toggleWarnings()
                 }
                 .font(.system(size: 11))
                 .buttonStyle(.plain)
+                .focusable()
+                .onKeyPress(keys: [.return, .space]) { _ in toggleWarnings(); return .handled }
+                .accessibilityLabel(model.alertsSnoozed(provider) ? "Resume quota warnings" : "Snooze warnings until reset")
                 .foregroundStyle(.secondary)
                 .help("Each current quota window stays snoozed until its own reset. Quota-return alerts remain enabled if selected.")
             }
@@ -61,12 +63,20 @@ struct DetailView: View {
                     .padding(.top, 4)
                 Button("Usage trends…", action: onOpenTrends)
                     .controlSize(.small)
+                    .focusable()
+                    .onKeyPress(keys: [.return, .space]) { _ in onOpenTrends(); return .handled }
+                    .accessibilityLabel("Open usage trends")
             }
         }
         .padding(.horizontal, 18)
         .padding(.top, 10)
         .padding(.bottom, 16)
         .onAppear { backFocused = true }
+    }
+
+    private func toggleWarnings() {
+        if model.alertsSnoozed(provider) { model.resumeAlerts(provider) }
+        else { model.snoozeAlerts(provider) }
     }
 
     private var header: some View {
@@ -95,6 +105,8 @@ struct DetailView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .focusable()
+        .onKeyPress(keys: [.return, .space]) { _ in onBack(); return .handled }
         .accessibilityLabel("Back to all providers")
         .focused($backFocused)
     }
