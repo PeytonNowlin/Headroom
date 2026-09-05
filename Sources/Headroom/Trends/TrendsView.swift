@@ -42,17 +42,17 @@ struct TrendsView: View {
                     }
                     Chart(trend.days) { day in
                         if day.tile.hasData {
-                            BarMark(x: .value("Day", day.date, unit: .day), y: .value("Estimated value", day.tile.cost))
+                            BarMark(x: .value("Day", dayLabel(day.date)), y: .value("Estimated value", day.tile.cost))
                                 .foregroundStyle(Color.accentColor.gradient)
-                                .accessibilityLabel(day.date.formatted(date: .abbreviated, time: .omitted))
+                                .accessibilityLabel(dayLabel(day.date))
                                 .accessibilityValue(Formatting.dollars(day.tile.cost) + (day.tile.unpricedTokens > 0 ? ", incomplete pricing" : ""))
                         }
                     }
-                    .chartXScale(domain: trend.days.first!.date...model.environment.calendar.date(byAdding: .day, value: 1, to: trend.days.last!.date)!)
+                    .chartXScale(domain: trend.days.map { dayLabel($0.date) })
                     .chartXAxis {
-                        AxisMarks(values: .stride(by: .day, count: period == .week ? 1 : 5)) {
-                            AxisValueLabel(format: .dateTime.month(.abbreviated).day())
-                        }
+                        AxisMarks(values: trend.days.enumerated().compactMap { index, day in
+                            index % (period == .week ? 1 : 5) == 0 ? dayLabel(day.date) : nil
+                        }) { AxisValueLabel() }
                     }
                     .chartYAxis { AxisMarks(format: Decimal.FormatStyle.Currency(code: "USD")) }
                     .frame(height: 200)
@@ -98,6 +98,13 @@ struct TrendsView: View {
         .frame(minWidth: 620, minHeight: 520)
         .environment(\.calendar, model.environment.calendar)
         .environment(\.timeZone, model.environment.timeZone)
+    }
+
+    private func dayLabel(_ date: Date) -> String {
+        var style = Date.FormatStyle.dateTime.month(.abbreviated).day()
+        style.calendar = model.environment.calendar
+        style.timeZone = model.environment.timeZone
+        return date.formatted(style)
     }
 
     private func metric(_ title: String, _ value: String) -> some View {
