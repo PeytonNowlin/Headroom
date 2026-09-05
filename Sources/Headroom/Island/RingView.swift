@@ -111,28 +111,34 @@ struct RingView: View {
     }
 }
 
-/// The compact-state indicator: a dot per provider, colored by urgency.
+/// Remaining quota in a tiny ring, with a single pulse after confirmed recovery.
 struct ProviderDot: View {
     let state: ProviderState?
     let status: ConnectionStatus
     @Environment(\.colorScheme) private var scheme
 
+    var resetAt: Date? = nil
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
         let color = Self.color(state: state, status: status, scheme: scheme) ?? .clear
-        let used = state?.snapshot?.ringUsedPercent ?? 0
-        Group {
-            if status == .expired || state?.lastError != nil || used >= 90 {
-                Text("!").font(.system(size: 9, weight: .heavy))
-            } else if used >= 70 {
-                Capsule().frame(width: 7, height: 3)
-            } else if used >= 40 {
-                Circle().strokeBorder(lineWidth: 1.5).frame(width: 6, height: 6)
+        let remaining = min(1, max(0, (state?.snapshot?.ringRemainingPercent ?? 0) / 100))
+        ZStack {
+            Circle().strokeBorder(color.opacity(0.28), lineWidth: 1.5)
+            if status == .expired || state?.lastError != nil {
+                Text("!").font(.system(size: 7, weight: .heavy)).foregroundStyle(color)
             } else {
-                Circle().frame(width: 6, height: 6)
+                Circle().trim(from: 0, to: remaining)
+                    .stroke(color, style: StrokeStyle(lineWidth: 1.8, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+                    .padding(0.9)
             }
         }
-        .foregroundStyle(color)
-        .frame(width: 7, height: 10)
+        .frame(width: 9, height: 9)
+        .phaseAnimator([false, true, false], trigger: resetAt) { content, active in
+            content.scaleEffect(active && !reduceMotion ? 1.3 : 1)
+                .brightness(active && !reduceMotion ? 0.2 : 0)
+        } animation: { _ in .easeInOut(duration: 0.25) }
         .accessibilityElement(children: .ignore)
         .opacity(status == .stale ? 0.6 : 1)
     }

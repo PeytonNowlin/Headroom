@@ -87,6 +87,17 @@ final class IslandController {
         )
         let host = IslandHostView(layout: layout, rootView: root)
         host.currentSize = { [state] in state.currentSize }
+        host.providerAtPoint = { [weak model, state] point in
+            guard state.mode.isCompact, let model else { return nil }
+            return IslandGeometry.compactProvider(at: point, layout: state.layout, providers: model.dotProviders)
+        }
+        host.onProviderHover = { [weak self, state] provider in
+            state.hoveredProvider = provider
+            self?.updateClockVisibility()
+            if let instance = self?.instances[id], instance.hovering {
+                self?.hoverChanged(true, on: id)
+            }
+        }
         host.onHoverChange = { [weak self] hovering in self?.hoverChanged(hovering, on: id) }
         host.onRightClick = { [weak self] event in self?.showContextMenu(for: event, on: id) }
         host.onBackgroundClick = { [weak self] in self?.togglePinned() }
@@ -175,10 +186,10 @@ final class IslandController {
         instance.hovering = hovering
         instance.dwellTask?.cancel()
         if hovering {
-            guard instance.state.mode == .compact else { return }
+            guard instance.state.mode == .compact, instance.state.hoveredProvider == nil else { return }
             instance.dwellTask = Task { [weak instance] in
                 try? await Task.sleep(for: Motion.hoverDwell)
-                guard !Task.isCancelled, let instance else { return }
+                guard !Task.isCancelled, let instance, instance.state.mode.isCompact, instance.state.hoveredProvider == nil else { return }
                 instance.setMode(.expanded)
             }
         } else if !pinned {
@@ -194,6 +205,7 @@ final class IslandController {
 
     private func select(_ provider: ProviderID?, on id: CGDirectDisplayID) {
         guard let instance = instances[id] else { return }
+        instance.dwellTask?.cancel()
         if let provider {
             instance.setMode(.detail(provider))
         } else {

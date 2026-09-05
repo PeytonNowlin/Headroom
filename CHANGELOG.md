@@ -4,6 +4,11 @@ All notable changes to Headroom. The format follows [Keep a Changelog](https://k
 
 ## [Unreleased]
 
+### Changed
+
+- Compact LEDs now show remaining quota as tiny gauges with direct provider click targets and hover labels for quota, reset, and freshness.
+- Gauges pulse once after fresh provider data confirms a reset that restores headroom. The pulse respects Reduce Motion and does not depend on notification settings.
+
 ## [0.4.0] - 2026-09-05
 
 ### Added

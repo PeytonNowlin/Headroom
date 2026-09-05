@@ -48,6 +48,20 @@ struct IslandRenderingTests {
         state.mode = .compact
         try await capture(IslandView(state: state, model: model), size: CGSize(width: layout.panel.width, height: 80),
                           name: "compact", directory: directory)
+        state.hoveredProvider = .codex
+        try await capture(IslandView(state: state, model: model), size: layout.panel,
+                          name: "compact-led-hover", directory: directory)
+        state.hoveredProvider = nil
+        try await capture(HStack(spacing: 20) {
+            ForEach([0.0, 25, 50, 75, 95, 100], id: \.self) { used in
+                VStack {
+                    ProviderDot(state: ProviderState(provider: .claude, snapshot: Snapshot(provider: .claude, fetchedAt: now, status: .connected,
+                        windows: [QuotaWindow(id: "session", title: "Session", usedPercent: used, resetsAt: now.addingTimeInterval(3600), duration: 18000)])), status: .connected)
+                    Text("\(Int(100 - used))%").font(.caption)
+                }
+            }
+        }.padding(20).background(.black).environment(\.colorScheme, .dark), size: CGSize(width: 420, height: 90),
+                          name: "led-gauges", directory: directory)
         state.mode = .detail(.claude)
         try await capture(IslandView(state: state, model: model), size: layout.panel,
                           name: "detail-saved", directory: directory)

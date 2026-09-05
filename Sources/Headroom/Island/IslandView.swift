@@ -49,6 +49,19 @@ struct IslandView: View {
         .frame(width: size.width, height: size.height, alignment: .top)
         .frame(width: state.layout.panel.width, height: state.layout.panel.height, alignment: .top)
         .overlay(alignment: .top) {
+            if state.mode.isCompact, let provider = state.hoveredProvider, model.activeAlert == nil {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(provider.displayName).font(.caption.bold())
+                    Text(providerDescription(provider)).font(.caption)
+                }
+                .padding(10)
+                .frame(width: 260, alignment: .leading)
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
+                .padding(.top, size.height + 6)
+                .allowsHitTesting(false)
+            }
+        }
+        .overlay(alignment: .top) {
             if let alert = model.activeAlert {
                 AlertBanner(alert: alert)
                     .padding(.top, size.height + 8)
@@ -93,12 +106,12 @@ struct IslandView: View {
         let providers = model.dotProviders
         let split = (providers.count + 1) / 2
         return HStack(spacing: 0) {
-            HStack(spacing: 6) {
+            HStack(spacing: 4) {
                 ForEach(providers.prefix(split)) { dot($0) }
             }
             .frame(maxWidth: .infinity, alignment: .trailing)
             Color.clear.frame(width: state.layout.anchor.compactGap)
-            HStack(spacing: 6) {
+            HStack(spacing: 4) {
                 ForEach(providers.dropFirst(split)) { dot($0) }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -125,10 +138,16 @@ struct IslandView: View {
     }
 
     private func dot(_ id: ProviderID) -> some View {
-        ProviderDot(state: model.state(id), status: model.status(id))
-            .accessibilityLabel("\(id.displayName), \(model.state(id)?.freshness(at: model.now) ?? "Not signed in")")
-            .accessibilityValue(quotaDescription(id))
-            .foregroundStyle(Color.white)
+        Button { onSelect(id) } label: {
+            ProviderDot(state: model.state(id), status: model.status(id), resetAt: model.resetSignals[id])
+                .frame(width: 14, height: 14)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(id.displayName)
+        .accessibilityValue(providerDescription(id))
+        .accessibilityHint("Open quota details")
+        .foregroundStyle(Color.white)
     }
 
     // MARK: - Expanded

@@ -10,6 +10,7 @@ final class IslandState {
     /// Pinned: stays open when the cursor leaves; cleared by click, hotkey, or clicking outside.
     var pinned = false
     var keyboardNavigation = false
+    var hoveredProvider: ProviderID?
     var focusedProvider: ProviderID?
 
     func moveProviderFocus(_ delta: Int, providers: [ProviderID]) {

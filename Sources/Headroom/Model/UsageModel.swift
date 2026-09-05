@@ -10,6 +10,7 @@ final class UsageModel {
     private(set) var states: [ProviderID: ProviderState] = [:]
     private(set) var spend: [ProviderID: SpendSummary] = [:]
     private(set) var trends: [ProviderID: [SpendPeriod: SpendTrend]] = [:]
+    private(set) var resetSignals: [ProviderID: Date] = [:]
     var onAlert: ((UsageAlert) -> Void)?
     private var visibleSurfaces: Set<String> = []
     private var clockTask: Task<Void, Never>?
@@ -86,6 +87,10 @@ final class UsageModel {
                         self.usageHistory.record(snapshot)
                         if let data = try? JSONEncoder().encode(self.usageHistory) {
                             try? self.environment.writeFile(self.environment.dataDirectory.appending(path: "quota-history.json"), data)
+                        }
+                        if previous?.isRestored == false, previous?.lastError == nil,
+                           QuotaRecovery.confirmed(snapshot, after: previous?.snapshot, now: self.now) {
+                            self.resetSignals[state.provider] = snapshot.fetchedAt
                         }
                         self.evaluateAlerts(snapshot, previous: previous?.snapshot)
                     }

@@ -87,6 +87,22 @@ struct IslandLayout: Equatable {
 }
 
 enum IslandGeometry {
+    /// Matches the compact HStacks: two groups around the notch, 14-point targets and 4-point gaps.
+    static func compactProvider(at point: CGPoint, layout: IslandLayout, providers: [ProviderID]) -> ProviderID? {
+        let split = (providers.count + 1) / 2
+        for (index, provider) in providers.enumerated() {
+            let x: CGFloat
+            if index < split {
+                x = layout.panel.width / 2 - layout.anchor.compactGap / 2 - CGFloat(split - index) * 18 + 4
+            } else {
+                x = layout.panel.width / 2 + layout.anchor.compactGap / 2 + CGFloat(index - split) * 18
+            }
+            let rect = CGRect(x: x, y: (layout.compact.height - 14) / 2, width: 14, height: 14)
+            if rect.contains(point) { return provider }
+        }
+        return nil
+    }
+
     static func anchor(for screen: NSScreen) -> IslandAnchor {
         let inset = screen.safeAreaInsets.top
         if inset > 0,

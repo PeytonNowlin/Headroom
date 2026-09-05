@@ -6,7 +6,7 @@
 
 A quota island for your MacBook notch. Headroom shows how much headroom you have left on Claude, Codex, Grok, and Cursor — as tiny dots beside the notch, as draining rings when you hover, and as full quota windows, reset countdowns, and local spend when you click in.
 
-- **Compact**: one dot per signed-in CLI, coloured by urgency (green → yellow → orange → red).
+- **Compact**: a tiny remaining-quota gauge per provider, colored by urgency (green → yellow → orange → red). Hover a gauge for quota/reset context; click it to open that provider.
 - **Hover**: rings per provider showing percent remaining, the limiting window, its reset countdown, and when usage was last checked. The footer shows estimated token value and tokens for today / yesterday / 30 days.
 - **Click a ring**: every quota window with its reset time and recent versus whole-window pace, provider-reported extra usage, Codex reset credits, and estimated token value. Retry a connection or snooze warnings here.
 - **Alerts**: one combined banner per window for 80% / 95% usage and confident recent-pace warnings. Settings offers per-provider warnings, snooze until each current window resets, and opt-in banners when a confirmed reset restores quota after 80%+ usage.
@@ -32,7 +32,9 @@ If macOS says the app is "damaged", clear the quarantine flag instead: `xattr -d
 
 | Action | Result |
 | --- | --- |
-| Hover the notch | Expand to rings |
+| Hover a compact gauge | Show provider quota, reset, and freshness |
+| Click a compact gauge | Open that provider directly |
+| Hover the rest of the notch | Expand to rings |
 | Click a ring | Drill into that provider |
 | Right-click | Refresh, pin open, trends, updates, settings, quit |
 | `⌃⌥U` (customizable) | Open and focus the island; press again to close |
@@ -48,7 +50,7 @@ Forecasts use up to an hour of local quota observations. They require at least t
 
 **Estimated token value is not your subscription bill.** Values use model token prices or recorded costs. An asterisk marks a partial estimate with unknown model prices; provider-reported extra usage is shown separately.
 
-Compact indicators also use shapes: solid below 40% used, hollow at 40–69%, a dash at 70–89%, and `!` at 90%+ or for connection problems. Indicators have accessibility labels, and repeating ring animation respects Reduce Motion.
+Compact gauges drain with remaining quota, so color is not the only signal. An empty ring means no remaining headroom; `!` indicates a connection problem. A single soft pulse marks a confirmed reset that restores headroom, independent of notification settings. Saved data and elapsed countdowns do not trigger it. Reduce Motion disables the pulse.
 
 Open **Usage Trends** from the menu, the estimated-value footer, or provider details to compare seven or thirty calendar days and see value by model. Missing records remain gaps; unknown prices are excluded from dollar totals and disclosed.
 
