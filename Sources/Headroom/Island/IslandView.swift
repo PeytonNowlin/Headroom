@@ -9,6 +9,8 @@ struct IslandView: View {
     var model: UsageModel
     var onSelect: (ProviderID?) -> Void = { _ in }
     var onOpenSettings: () -> Void = {}
+    var onOpenTrends: (ProviderID?) -> Void = { _ in }
+    @FocusState private var focusedProvider: ProviderID?
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -57,6 +59,18 @@ struct IslandView: View {
         .animation(Motion.island, value: state.mode)
         .animation(Motion.island, value: state.detailHeight)
         .animation(Motion.island, value: model.activeAlert?.id)
+        .onChange(of: state.focusedProvider) { _, id in focusedProvider = id }
+        .onChange(of: focusedProvider) { _, id in
+            state.focusedProvider = id
+        }
+        .onChange(of: state.keyboardNavigation) { _, active in
+            if active { focusedProvider = state.focusedProvider }
+        }
+        .onChange(of: model.visibleProviders) { _, providers in
+            if let focused = state.focusedProvider, !providers.contains(focused) {
+                state.focusedProvider = providers.first
+            }
+        }
     }
 
     @ViewBuilder
@@ -158,13 +172,27 @@ struct IslandView: View {
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(LiftButtonStyle())
+                        .focusable()
+                        .focused($focusedProvider, equals: id)
+                        .focusEffectDisabled()
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(Color.accentColor, lineWidth: 2)
+                                .padding(-4)
+                                .opacity(state.keyboardNavigation && state.focusedProvider == id ? 1 : 0)
+                                .allowsHitTesting(false)
+                        }
+                        .accessibilityHint("Open quota details for \(id.displayName)")
                     }
                 }
                 .padding(.top, 18)
             }
             Spacer(minLength: 0)
             if let total = model.totalSpend {
-                SpendFooter(summary: total)
+                Button { onOpenTrends(nil) } label: { SpendFooter(summary: total) }
+                    .buttonStyle(.plain)
+                    .help("Open usage trends")
+                    .accessibilityLabel("Usage trends, estimated token value")
                     .transition(.opacity)
             }
         }
@@ -201,6 +229,7 @@ struct IslandView: View {
                     now: model.now,
                     spend: model.spend[id],
                     model: model,
+                    onOpenTrends: { onOpenTrends(id) },
                     onBack: { onSelect(nil) }
                 )
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in

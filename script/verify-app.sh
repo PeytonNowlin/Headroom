@@ -29,5 +29,18 @@ if strings "$APP/Contents/MacOS/Headroom" | grep -Fq "$PWD/.build"; then
   exit 1
 fi
 
+[[ -x "$APP/Contents/Frameworks/Sparkle.framework/Sparkle" ]] || {
+  echo "missing Sparkle update framework" >&2
+  exit 1
+}
+otool -L "$APP/Contents/MacOS/Headroom" | grep -Fq '@rpath/Sparkle.framework/' || {
+  echo "executable does not link the bundled Sparkle framework" >&2
+  exit 1
+}
+otool -l "$APP/Contents/MacOS/Headroom" | grep -Fq '@executable_path/../Frameworks' || {
+  echo "missing bundled-framework runtime search path" >&2
+  exit 1
+}
+/usr/libexec/PlistBuddy -c 'Print :SUPublicEDKey' "$APP/Contents/Info.plist" >/dev/null
 codesign --verify --deep --strict "$APP"
 echo "Verified $APP"

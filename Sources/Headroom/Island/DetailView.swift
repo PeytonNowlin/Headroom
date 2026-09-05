@@ -9,7 +9,9 @@ struct DetailView: View {
     let now: Date
     var spend: SpendSummary?
     var model: UsageModel
+    var onOpenTrends: () -> Void = {}
     let onBack: () -> Void
+    @FocusState private var backFocused: Bool
 
     private var snapshot: Snapshot? { state?.snapshot }
 
@@ -57,11 +59,14 @@ struct DetailView: View {
             if let spend {
                 SpendTiles(summary: spend)
                     .padding(.top, 4)
+                Button("Usage trends…", action: onOpenTrends)
+                    .controlSize(.small)
             }
         }
         .padding(.horizontal, 18)
         .padding(.top, 10)
         .padding(.bottom, 16)
+        .onAppear { backFocused = true }
     }
 
     private var header: some View {
@@ -91,6 +96,7 @@ struct DetailView: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Back to all providers")
+        .focused($backFocused)
     }
 
     private var refreshLine: String {

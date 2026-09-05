@@ -16,6 +16,9 @@ final class IslandController {
     private var outsideClickMonitor: Any?
 
     var onOpenSettings: () -> Void = {}
+    var onOpenTrends: (ProviderID?) -> Void = { _ in }
+    var onCheckForUpdates: () -> Void = {}
+    private var previousApplication: NSRunningApplication?
 
     init(model: UsageModel) {
         self.model = model
@@ -46,7 +49,7 @@ final class IslandController {
         }
 
         KeyboardShortcuts.onKeyUp(for: .toggleIsland) { [weak self] in
-            self?.togglePinned()
+            self?.toggleKeyboardNavigation()
         }
     }
 
@@ -68,6 +71,7 @@ final class IslandController {
         for id in Set(instances.keys).subtracting(seen) {
             instances.removeValue(forKey: id)?.close()
         }
+        updateClockVisibility()
     }
 
     private func makeInstance(on screen: NSScreen) -> IslandInstance {
@@ -78,7 +82,8 @@ final class IslandController {
         let root = IslandView(
             state: state, model: model,
             onSelect: { [weak self] provider in self?.select(provider, on: id) },
-            onOpenSettings: { [weak self] in self?.onOpenSettings() }
+            onOpenSettings: { [weak self] in self?.onOpenSettings() },
+            onOpenTrends: { [weak self] provider in self?.onOpenTrends(provider) }
         )
         let host = IslandHostView(layout: layout, rootView: root)
         host.currentSize = { [state] in state.currentSize }
@@ -87,11 +92,81 @@ final class IslandController {
         host.onBackgroundClick = { [weak self] in self?.togglePinned() }
         let panel = IslandPanel(frame: IslandGeometry.panelFrame(layout: layout, on: screen))
         panel.contentView = host
+        panel.onKeyPress = { [weak self] event in self?.handleKey(event, on: id) ?? false }
 
         let instance = IslandInstance(displayID: id, state: state, panel: panel, host: host)
+        instance.onVisibilityChange = { [weak self] in self?.updateClockVisibility() }
         instance.setHidden(hiddenDisplays.contains(id))
         if pinned { instance.setMode(.expanded) }
         return instance
+    }
+
+    private func updateClockVisibility() {
+        model.setSurfaceVisible("islands", instances.values.contains { $0.showsCountdowns })
+    }
+
+    private var activeInstance: IslandInstance? {
+        NSScreen.screens.first { $0.frame.contains(NSEvent.mouseLocation) }?.displayID.flatMap { instances[$0] }
+            ?? NSScreen.main?.displayID.flatMap { instances[$0] }
+            ?? instances.values.first
+    }
+
+    func openProvider(_ provider: ProviderID) {
+        guard let instance = activeInstance else { return }
+        if !pinned { togglePinned() }
+        instance.setMode(.detail(provider))
+        focus(instance)
+    }
+
+    private func toggleKeyboardNavigation() {
+        if instances.values.contains(where: { $0.panel.isKeyWindow && $0.state.keyboardNavigation }) {
+            closeFromKeyboard()
+            return
+        }
+        guard let instance = activeInstance else { return }
+        if !pinned { togglePinned() }
+        instance.setMode(.expanded)
+        instance.state.focusedProvider = model.visibleProviders.first
+        focus(instance)
+    }
+
+    private func focus(_ instance: IslandInstance) {
+        if NSWorkspace.shared.frontmostApplication?.processIdentifier != NSRunningApplication.current.processIdentifier {
+            previousApplication = NSWorkspace.shared.frontmostApplication
+        }
+        for other in instances.values { other.state.keyboardNavigation = other === instance }
+        NSApp.activate()
+        instance.panel.makeKeyAndOrderFront(nil)
+        instance.panel.makeFirstResponder(instance.host)
+    }
+
+    private func handleKey(_ event: NSEvent, on id: CGDirectDisplayID) -> Bool {
+        guard event.modifierFlags.intersection([.command, .control, .option]).isEmpty,
+              let instance = instances[id], !instance.state.mode.isCompact else { return false }
+        if event.keyCode == 53 { closeFromKeyboard(); return true }
+        guard instance.state.mode == .expanded else { return false }
+        switch event.keyCode {
+        case 123, 126: instance.state.moveProviderFocus(-1, providers: model.visibleProviders)
+        case 124, 125: instance.state.moveProviderFocus(1, providers: model.visibleProviders)
+        case 36, 76:
+            guard let provider = instance.state.focusedProvider else { return false }
+            select(provider, on: id)
+        default: return false
+        }
+        return true
+    }
+
+    private func closeFromKeyboard() {
+        pinned = false
+        for instance in instances.values {
+            instance.state.pinned = false
+            instance.state.keyboardNavigation = false
+            instance.panel.resignKey()
+            instance.setMode(.compact)
+        }
+        stopOutsideClickMonitor()
+        previousApplication?.activate()
+        previousApplication = nil
     }
 
     // MARK: - State machine
@@ -199,6 +274,12 @@ final class IslandController {
         menu.addItem(pin)
 
         menu.addItem(.separator())
+        let trends = NSMenuItem(title: "Usage Trends…", action: #selector(openTrends), keyEquivalent: "t")
+        trends.target = self
+        menu.addItem(trends)
+        let updates = NSMenuItem(title: "Check for Updates…", action: #selector(checkForUpdates), keyEquivalent: "")
+        updates.target = self
+        menu.addItem(updates)
         let settings = NSMenuItem(title: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
         settings.target = self
         menu.addItem(settings)
@@ -218,5 +299,7 @@ final class IslandController {
 
     @objc private func refreshNow() { model.refreshAll() }
     @objc private func pinFromMenu() { togglePinned() }
+    @objc private func openTrends() { onOpenTrends(nil) }
+    @objc private func checkForUpdates() { onCheckForUpdates() }
     @objc private func openSettings() { onOpenSettings() }
 }

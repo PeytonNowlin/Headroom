@@ -71,6 +71,12 @@ struct IslandRenderingTests {
                           name: "settings", directory: directory)
         try await capture(SettingsView(model: model, preferences: preferences), size: CGSize(width: 520, height: 1600),
                           name: "settings-full", directory: directory)
+        try await capture(TrendsView(model: model), size: CGSize(width: 680, height: 680),
+                          name: "trends-empty", directory: directory)
+        let trendModel = UsageModel(environment: SpendModelFixture().environment, preferences: preferences)
+        await trendModel.rescanSpend(force: true)
+        try await capture(TrendsView(model: trendModel), size: CGSize(width: 680, height: 760),
+                          name: "trends-populated", directory: directory)
         let quota = windows[0]
         var history = UsageHistory()
         for (ago, used) in [(600.0, 66.0), (300.0, 71.0), (0.0, 76.0)] {

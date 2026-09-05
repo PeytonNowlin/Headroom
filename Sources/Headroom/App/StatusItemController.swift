@@ -8,6 +8,8 @@ final class StatusItemController {
     var onRefresh: () -> Void = {}
     var onTogglePin: () -> Void = {}
     var onSettings: () -> Void = {}
+    var onTrends: () -> Void = {}
+    var onUpdates: () -> Void = {}
 
     var isShown: Bool {
         get { item != nil }
@@ -23,6 +25,8 @@ final class StatusItemController {
         menu.addItem(action(title: "Refresh Now", #selector(refresh), "r"))
         menu.addItem(action(title: "Toggle Island", #selector(togglePin), ""))
         menu.addItem(.separator())
+        menu.addItem(action(title: "Usage Trends…", #selector(trends), "t"))
+        menu.addItem(action(title: "Check for Updates…", #selector(updates), ""))
         menu.addItem(action(title: "Settings…", #selector(settings), ","))
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit Headroom", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
@@ -43,5 +47,7 @@ final class StatusItemController {
 
     @objc private func refresh() { onRefresh() }
     @objc private func togglePin() { onTogglePin() }
+    @objc private func trends() { onTrends() }
+    @objc private func updates() { onUpdates() }
     @objc private func settings() { onSettings() }
 }

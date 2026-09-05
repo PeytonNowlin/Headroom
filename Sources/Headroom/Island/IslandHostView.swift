@@ -44,6 +44,7 @@ final class IslandHostView: NSView {
     required init?(coder: NSCoder) { fatalError() }
 
     override var isFlipped: Bool { true }
+    override var acceptsFirstResponder: Bool { true }
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()

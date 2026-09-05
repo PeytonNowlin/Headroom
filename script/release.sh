@@ -32,7 +32,9 @@ awk -v v="$VERSION" '
   found { print }
 ' CHANGELOG.md > "$NOTES_FILE"
 
+script/make-appcast.sh "$VERSION"
+
 git tag -a "$TAG" -m "Headroom $TAG"
 git push origin "$TAG"
-gh release create "$TAG" "$DMG" "$DMG.sha256" --title "Headroom $TAG" --notes-file "$NOTES_FILE" --verify-tag --latest
+gh release create "$TAG" "$DMG" "$DMG.sha256" "build/appcast.xml" --title "Headroom $TAG" --notes-file "$NOTES_FILE" --verify-tag --latest
 echo "Released $TAG"

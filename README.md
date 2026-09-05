@@ -34,8 +34,10 @@ If macOS says the app is "damaged", clear the quarantine flag instead: `xattr -d
 | --- | --- |
 | Hover the notch | Expand to rings |
 | Click a ring | Drill into that provider |
-| Right-click | Refresh, pin open, settings, quit |
-| `⌃⌥U` (customizable) | Toggle the island from anywhere |
+| Right-click | Refresh, pin open, trends, updates, settings, quit |
+| `⌃⌥U` (customizable) | Open and focus the island; press again to close |
+| Arrow keys / Return | Select a provider / open its details |
+| Tab / Shift-Tab / Escape | Traverse controls / close and restore the previous app |
 | Click empty island while pinned | Unpin |
 
 Providers refresh every 5 minutes; the countdown in the island's corner shows when. Refresh Now is in the right-click menu. If a provider rate-limits us, Headroom waits out the cooldown rather than retrying.
@@ -48,10 +50,16 @@ Forecasts use up to an hour of local quota observations. They require at least t
 
 Compact indicators also use shapes: solid below 40% used, hollow at 40–69%, a dash at 70–89%, and `!` at 90%+ or for connection problems. Indicators have accessibility labels, and repeating ring animation respects Reduce Motion.
 
+Open **Usage Trends** from the menu, the estimated-value footer, or provider details to compare seven or thirty calendar days and see value by model. Missing records remain gaps; unknown prices are excluded from dollar totals and disclosed.
+
+Enable **macOS notifications** in Settings to request permission for quota alerts. Notifications offer **Open Provider** and **Snooze Until Reset**; the island banners continue to work without notification permission.
+
+Use **Check for Updates** in the menu or Settings. Automatic checks are optional; downloads and the update feed are cryptographically signed. This first updater-enabled version requires the usual manual installation; subsequent releases can install in-app.
+
 ## Privacy
 
 - Credentials are read from where the CLIs keep them (Keychain for Claude, `~/.codex/auth.json`, `~/.grok/auth.json`, Cursor's state database opened read-only) and are only ever used to call each vendor's own usage endpoint. Headroom never writes credentials and never refreshes tokens.
-- Spend is computed locally from session logs (`~/.claude/projects`, `~/.codex/sessions`, `~/.grok/sessions`). Cursor has no local log, so its last 30 days are fetched from your own Cursor dashboard export and priced locally. Nothing else leaves your machine except an hourly fetch of public model pricing (LiteLLM, models.dev, and OpenUsage's supplement).
+- Spend is computed locally from session logs (`~/.claude/projects`, `~/.codex/sessions`, `~/.grok/sessions`). Cursor has no local log, so its last 30 days are fetched from your own Cursor dashboard export and priced locally. Public model pricing is fetched hourly (LiteLLM, models.dev, and OpenUsage's supplement). Update checks contact GitHub for the signed feed and release downloads; Sparkle system-profile reporting is disabled.
 - Quota history stores only timestamps and percentages in Headroom’s own Application Support directory, bounded to the most recent hour of observations per current window. No prompts or credentials are included.
 - No analytics, no crash reporting, no accounts.
 
@@ -71,7 +79,7 @@ HEADROOM_UI_ARTIFACTS="$PWD/.build/ui-checks" swift test --filter IslandRenderin
 
 These captures check native text and layout; AppKit's view capture does not reproduce the desktop glass backdrop. Verify glass appearance and VoiceOver navigation in the running app; the SwiftPM test host does not expose the full accessibility tree.
 
-Releases are cut with `script/release.sh vX.Y.Z`, which runs the tests, builds arm64 release, signs ad-hoc, packages a DMG, tags, and publishes a GitHub Release with the matching `CHANGELOG.md` section as notes.
+Releases are cut with `script/release.sh vX.Y.Z`, which runs the tests, builds arm64 release, signs ad-hoc, packages a DMG, tags, and publishes a GitHub Release with the matching `CHANGELOG.md` section as notes. It also signs and publishes `appcast.xml` for in-app updates. The dedicated Sparkle key lives in the release maintainer’s Keychain under account `io.github.peytonnowlin.Headroom`; never replace it casually or commit/export the private key. See [release signing](docs/release-signing.md).
 
 ## Credits
 

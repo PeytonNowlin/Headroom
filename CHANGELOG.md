@@ -4,6 +4,20 @@ All notable changes to Headroom. The format follows [Keep a Changelog](https://k
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-09-05
+
+### Added
+
+- Signed in-app updates powered by Sparkle, with Check for Updates and optional automatic checks. Release archives and update feeds use a dedicated Ed25519 signing key.
+- Opt-in macOS quota notifications with Open Provider and Snooze Until Reset actions, following the existing warning and quota-return settings.
+- Seven- and thirty-day usage trends with daily estimated token value, per-model attribution, and explicit missing-data and partial-price labels.
+- Keyboard access: the global shortcut focuses the island, arrows select providers, Return opens details, Tab traverses controls, and Escape closes it and restores the previous app.
+
+### Changed
+
+- Countdown updates slow to once per minute when all interactive surfaces are closed; visible surfaces retain one-second updates.
+- Background local-log scans run every five minutes while idle and every two minutes while visible. Opening a surface wakes the scan schedule; unchanged logs avoid repeated reads, aggregation, and cache writes.
+
 ## [0.3.0] - 2026-09-05
 
 ### Added

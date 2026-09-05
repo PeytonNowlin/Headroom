@@ -30,6 +30,20 @@
 	<string>public.app-category.developer-tools</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
+	<key>SUFeedURL</key>
+	<string>https://github.com/PeytonNowlin/Headroom/releases/latest/download/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>yGVx6MMKrTsyimGBbdvw/UdD8Ysj46zzdPa99UcFJJg=</string>
+	<key>SUEnableAutomaticChecks</key>
+	<false/>
+	<key>SUAutomaticallyUpdate</key>
+	<false/>
+	<key>SURequireSignedFeed</key>
+	<true/>
+	<key>SUVerifyUpdateBeforeExtraction</key>
+	<true/>
+	<key>SUSendProfileInfo</key>
+	<false/>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
 	<key>NSHumanReadableCopyright</key>
