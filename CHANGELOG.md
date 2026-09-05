@@ -4,6 +4,8 @@ All notable changes to Headroom. The format follows [Keep a Changelog](https://k
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-09-05
+
 ### Changed
 
 - Compact LEDs now show remaining quota as tiny gauges with direct provider click targets and hover labels for quota, reset, and freshness.
