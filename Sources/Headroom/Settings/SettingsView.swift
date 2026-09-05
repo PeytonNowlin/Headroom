@@ -142,7 +142,7 @@ struct SettingsView: View {
     // MARK: - Legend
 
     private var legend: some View {
-        Section("Dot & ring colors", footnote: "Dots summarize the most-constrained window. A hollow dot means 40–69% used, a dash means 70–89%, and ! means 90%+ or a connection problem. Faded dots show saved usage.") {
+        Section("Gauge & ring colors", footnote: "Compact gauges drain as the most-constrained quota is used. An empty ring means no headroom; ! indicates a connection problem. Faded gauges show saved usage. Hover for context, or click to open the provider. A brief pulse marks confirmed quota recovery.") {
             HStack(spacing: 10) {
                 legendItem(.fine, "< 40%")
                 legendItem(.watch, "40–69%")

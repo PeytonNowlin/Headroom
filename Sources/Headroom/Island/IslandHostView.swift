@@ -1,4 +1,5 @@
 import AppKit
+import HeadroomCore
 import SwiftUI
 
 /// Hosts the SwiftUI island and owns hover tracking. Hit-testing is clipped to the island
@@ -11,6 +12,10 @@ final class IslandHostView: NSView {
 
     var layout: IslandLayout
     var currentSize: () -> CGSize = { .zero }
+    var providerAtPoint: (CGPoint) -> ProviderID? = { _ in nil }
+    var onProviderHover: (ProviderID?) -> Void = { _ in }
+    private var hoveredProvider: ProviderID?
+
     var onHoverChange: (Bool) -> Void = { _ in }
     var onRightClick: (NSEvent) -> Void = { _ in }
     /// A left click inside the silhouette that no SwiftUI control consumed.
@@ -75,21 +80,16 @@ final class IslandHostView: NSView {
     }
 
     override func mouseEntered(with event: NSEvent) {
-        hovering = islandContains(convert(event.locationInWindow, from: nil))
+        updateHover(at: convert(event.locationInWindow, from: nil))
     }
 
     override func mouseMoved(with event: NSEvent) {
-        hovering = islandContains(convert(event.locationInWindow, from: nil))
+        updateHover(at: convert(event.locationInWindow, from: nil))
     }
 
     override func mouseExited(with event: NSEvent) {
         // Trust the cursor's real position over the event: exits can arrive while it's still inside.
-        hovering = cursorInsideIsland()
-    }
-
-    private func cursorInsideIsland() -> Bool {
-        guard let window else { return false }
-        return islandContains(convert(window.mouseLocationOutsideOfEventStream, from: nil))
+        refreshHover()
     }
 
     override func mouseDown(with event: NSEvent) {
@@ -104,8 +104,19 @@ final class IslandHostView: NSView {
         onRightClick(event)
     }
 
+    private func updateHover(at point: CGPoint) {
+        let inside = islandContains(point)
+        let provider = inside ? providerAtPoint(point) : nil
+        if hoveredProvider != provider {
+            hoveredProvider = provider
+            onProviderHover(provider)
+        }
+        hovering = inside
+    }
+
     /// Re-evaluate hover after the island changes size under a stationary cursor.
     func refreshHover() {
-        hovering = cursorInsideIsland()
+        guard let window else { return }
+        updateHover(at: convert(window.mouseLocationOutsideOfEventStream, from: nil))
     }
 }

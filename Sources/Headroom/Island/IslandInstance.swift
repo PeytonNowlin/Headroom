@@ -15,7 +15,7 @@ final class IslandInstance {
     var hovering = false
     private var hiddenForFullScreen = false
     var onVisibilityChange: (() -> Void)?
-    var showsCountdowns: Bool { !hiddenForFullScreen && !state.mode.isCompact }
+    var showsCountdowns: Bool { !hiddenForFullScreen && (!state.mode.isCompact || state.hoveredProvider != nil) }
 
     init(displayID: CGDirectDisplayID, state: IslandState, panel: IslandPanel, host: IslandHostView) {
         self.displayID = displayID
