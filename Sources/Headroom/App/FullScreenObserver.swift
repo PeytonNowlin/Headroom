@@ -1,8 +1,8 @@
 import AppKit
 
 /// Reports which displays currently show a full-screen app. There is no public API for this;
-/// the reliable tell is a foreign window at the normal layer whose bounds equal the whole
-/// display, checked on every space change.
+/// infer it from normal-layer windows covering a display with no visible menu bar,
+/// checked on every space change.
 @MainActor
 final class FullScreenObserver {
     private var observers: [NSObjectProtocol] = []
@@ -50,16 +50,17 @@ final class FullScreenObserver {
     }
 
     private static func isFullScreen(_ screen: NSScreen, menuBarScreen: NSScreen, windows: [[String: Any]]) -> Bool {
+        isFullScreen(frame: screen.cgFrame, menuFrame: menuBarScreen.cgFrame,
+                     inset: screen.safeAreaInsets.top, windows: windows)
+    }
+
+    static func isFullScreen(frame: CGRect, menuFrame: CGRect, inset: CGFloat, windows: [[String: Any]]) -> Bool {
         let ownPID = ProcessInfo.processInfo.processIdentifier
-        let frame = screen.cgFrame
-        let menuFrame = menuBarScreen.cgFrame
         // A native full-screen window spans the display's width and stops below the notch band,
         // so it is shorter than the display by the top safe-area inset; a zoomed window has the
         // very same geometry. What separates them is the menu bar: the WindowServer's menu bar
         // window is on screen for a desktop and moved off screen for a full-screen space.
-        let inset = screen.safeAreaInsets.top
-        let minHeight = frame.height - inset - 1
-        var coveringWindow = false
+        var bandsByOwner: [pid_t: [CGRect]] = [:]
         var menuBarVisible = false
         for window in windows {
             guard let layer = window[kCGWindowLayer as String] as? Int,
@@ -72,12 +73,23 @@ final class FullScreenObserver {
                abs(x - menuFrame.minX) < 1, y > menuFrame.minY - 0.5, y < menuFrame.minY + 60 {
                 menuBarVisible = true
             }
-            if layer == 0, (window[kCGWindowOwnerPID as String] as? pid_t) != ownPID,
-               abs(w - frame.width) < 1, h >= minHeight,
-               abs(x - frame.minX) < 1, y > frame.minY - 0.5, y < frame.minY + inset + 0.5 {
-                coveringWindow = true
+            if layer == 0, let pid = window[kCGWindowOwnerPID as String] as? pid_t, pid != ownPID,
+               abs(w - frame.width) < 1, abs(x - frame.minX) < 1, h > 0,
+               y >= frame.minY - 0.5, y < frame.maxY {
+                bandsByOwner[pid, default: []].append(CGRect(x: x, y: y, width: w, height: h))
             }
         }
-        return coveringWindow && !menuBarVisible
+        guard !menuBarVisible else { return false }
+        // Chrome can expose its full-screen toolbar and content as separate windows.
+        // Require continuous coverage from one process; unrelated apps and gaps do not count.
+        return bandsByOwner.values.contains { bands in
+            var coveredTo = frame.minY + inset
+            for band in bands.sorted(by: { $0.minY < $1.minY }) {
+                guard band.minY <= coveredTo + 0.5 else { return false }
+                coveredTo = max(coveredTo, band.maxY)
+                if coveredTo >= frame.maxY - 1 { return true }
+            }
+            return false
+        }
     }
 }

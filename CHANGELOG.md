@@ -4,6 +4,12 @@ All notable changes to Headroom. The format follows [Keep a Changelog](https://k
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-09-08
+
+### Fixed
+
+- Hide in full-screen apps now recognizes Chrome windows whose toolbar and content are exposed as separate windows.
+
 ## [0.4.1] - 2026-09-05
 
 ### Changed
