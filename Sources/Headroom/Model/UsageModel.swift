@@ -35,6 +35,7 @@ final class UsageModel {
     private var pollers: [ProviderID: ProviderPoller] = [:]
     private var scanners: [ProviderID: SpendScanner] = [:]
     private let cursorSpend: CursorSpendSource
+    private let openCodeSpend: OpenCodeSpendSource
     private let pricing: PricingStore
     private var tasks: [Task<Void, Never>] = []
     static let spendInterval: Duration = .seconds(120)
@@ -45,6 +46,7 @@ final class UsageModel {
         self.preferences = preferences
         pricing = PricingStore(environment: environment)
         cursorSpend = CursorSpendSource(environment: environment)
+        openCodeSpend = OpenCodeSpendSource(environment: environment)
         alertLedger = Self.loadLedger(environment)
         if let data = try? environment.readFile(environment.dataDirectory.appending(path: "quota-history.json")),
            let history = try? JSONDecoder().decode(UsageHistory.self, from: data) {
@@ -57,6 +59,7 @@ final class UsageModel {
             CodexProvider(environment: environment),
             GrokProvider(environment: environment),
             CursorProvider(environment: environment),
+            OpenCodeProvider(environment: environment),
         ]
         let formats: [any UsageLogFormat] = [ClaudeLogFormat(), CodexLogFormat(), GrokLogFormat()]
         for format in formats {
@@ -236,6 +239,11 @@ final class UsageModel {
         if let ledger = await cursorSpend.ledger() {
             expected.append(.cursor)
             updateSpend(ledger, for: .cursor, pricing: table, calendar: calendar)
+        }
+        // Same shape as Cursor: the SQLite reads stay inside the actor, off the main thread.
+        if let ledger = await openCodeSpend.ledger() {
+            expected.append(.opencode)
+            updateSpend(ledger, for: .opencode, pricing: table, calendar: calendar)
         }
         spend = spend.filter { expected.contains($0.key) }
         trends = trends.filter { expected.contains($0.key) }

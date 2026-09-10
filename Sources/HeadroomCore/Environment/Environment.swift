@@ -24,6 +24,12 @@ public struct HostEnvironment: Sendable {
     public var dataDirectory: URL
     /// One value from a VS Code-style `ItemTable` state database, opened read-only.
     public var stateDatabaseValue: @Sendable (_ database: URL, _ key: String) -> String?
+    /// Immediate entries of a directory by name, without recursing. Cheap enough to call on a
+    /// directory that also holds large subtrees.
+    public var directoryEntries: @Sendable (_ directory: URL) -> [String]
+    /// First column of the first row of a read-only query against a SQLite database. Providers that
+    /// log usage to SQLite rather than JSONL read through this; the database's owner never sees a writer.
+    public var databaseQuery: @Sendable (_ database: URL, _ sql: String) -> String?
 
     public init(
         home: URL,
@@ -40,7 +46,9 @@ public struct HostEnvironment: Sendable {
         readFileRange: @escaping @Sendable (URL, Int) throws -> Data = { _, _ in Data() },
         writeFile: @escaping @Sendable (URL, Data) throws -> Void = { _, _ in },
         dataDirectory: URL? = nil,
-        stateDatabaseValue: @escaping @Sendable (URL, String) -> String? = { _, _ in nil }
+        stateDatabaseValue: @escaping @Sendable (URL, String) -> String? = { _, _ in nil },
+        directoryEntries: @escaping @Sendable (URL) -> [String] = { _ in [] },
+        databaseQuery: @escaping @Sendable (URL, String) -> String? = { _, _ in nil }
     ) {
         self.home = home
         self.timeZone = timeZone
@@ -57,6 +65,8 @@ public struct HostEnvironment: Sendable {
         self.writeFile = writeFile
         self.dataDirectory = dataDirectory ?? home.appending(path: "Library/Application Support/Headroom")
         self.stateDatabaseValue = stateDatabaseValue
+        self.directoryEntries = directoryEntries
+        self.databaseQuery = databaseQuery
     }
 
     public var calendar: Calendar {

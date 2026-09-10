@@ -4,7 +4,7 @@
 
 # Headroom
 
-A quota island for your MacBook notch. Headroom shows how much headroom you have left on Claude, Codex, Grok, and Cursor — as tiny dots beside the notch, as draining rings when you hover, and as full quota windows, reset countdowns, and local spend when you click in.
+A quota island for your MacBook notch. Headroom shows how much headroom you have left on Claude, Codex, Grok, Cursor, and OpenCode Go — as tiny dots beside the notch, as draining rings when you hover, and as full quota windows, reset countdowns, and local spend when you click in.
 
 - **Compact**: a tiny remaining-quota gauge per provider, colored by urgency (green → yellow → orange → red). Hover a gauge for quota/reset context; click it to open that provider.
 - **Hover**: rings per provider showing percent remaining, the limiting window, its reset countdown, and when usage was last checked. The footer shows estimated token value and tokens for today / yesterday / 30 days.
@@ -17,7 +17,7 @@ Headroom reads the same credentials your CLIs already use and the same session l
 
 - macOS 26 (Tahoe) or later, Apple silicon.
 - An island on every display: with a notch the island wraps it; without one it draws a small notch of its own at the top center.
-- At least one of the [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Codex](https://github.com/openai/codex), or [Grok](https://x.ai) CLIs signed in, or the [Cursor](https://cursor.com) app.
+- At least one of the [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Codex](https://github.com/openai/codex), [Grok](https://x.ai), or [OpenCode](https://opencode.ai) CLIs signed in, or the [Cursor](https://cursor.com) app.
 
 ## Install
 
@@ -60,8 +60,8 @@ Use **Check for Updates** in the menu or Settings. Automatic checks are optional
 
 ## Privacy
 
-- Credentials are read from where the CLIs keep them (Keychain for Claude, `~/.codex/auth.json`, `~/.grok/auth.json`, Cursor's state database opened read-only) and are only ever used to call each vendor's own usage endpoint. Headroom never writes credentials and never refreshes tokens.
-- Spend is computed locally from session logs (`~/.claude/projects`, `~/.codex/sessions`, `~/.grok/sessions`). Cursor has no local log, so its last 30 days are fetched from your own Cursor dashboard export and priced locally. Public model pricing is fetched hourly (LiteLLM, models.dev, and OpenUsage's supplement). Update checks contact GitHub for the signed feed and release downloads; Sparkle system-profile reporting is disabled.
+- Credentials are read from where the CLIs keep them (Keychain for Claude, `~/.codex/auth.json`, `~/.grok/auth.json`, the `opencode-go` key in `~/.local/share/opencode/auth.json`, Cursor's state database opened read-only) and are only ever used to call each vendor's own usage endpoint. Headroom never writes credentials and never refreshes tokens.
+- Spend is computed locally from session logs (`~/.claude/projects`, `~/.codex/sessions`, `~/.grok/sessions`). Cursor has no local log, so its last 30 days are fetched from your own Cursor dashboard export and priced locally. OpenCode records what each message cost, so its tiles are read (never written) from `~/.local/share/opencode/opencode*.db` with `sqlite3 -readonly` and use those recorded dollars. Public model pricing is fetched hourly (LiteLLM, models.dev, and OpenUsage's supplement). Update checks contact GitHub for the signed feed and release downloads; Sparkle system-profile reporting is disabled.
 - Quota history stores only timestamps and percentages in Headroom’s own Application Support directory, bounded to the most recent hour of observations per current window. No prompts or credentials are included.
 - No analytics, no crash reporting, no accounts.
 

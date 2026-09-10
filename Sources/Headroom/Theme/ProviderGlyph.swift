@@ -57,6 +57,21 @@ struct ProviderGlyph: View {
             p.addLine(to: bottomLeft); p.addLine(to: left); p.closeSubpath()
             p.move(to: left); p.addLine(to: mid); p.addLine(to: right)
             p.move(to: mid); p.addLine(to: bottom)
+        case .opencode:
+            // Open brackets around a centre bar — code, left open.
+            let w = r.width, h = r.height
+            let inset = w * 0.16
+            let lip = w * 0.18
+            p.move(to: CGPoint(x: r.minX + inset + lip, y: r.minY + h * 0.12))
+            p.addLine(to: CGPoint(x: r.minX + inset, y: r.minY + h * 0.12))
+            p.addLine(to: CGPoint(x: r.minX + inset, y: r.maxY - h * 0.12))
+            p.addLine(to: CGPoint(x: r.minX + inset + lip, y: r.maxY - h * 0.12))
+            p.move(to: CGPoint(x: r.maxX - inset - lip, y: r.minY + h * 0.12))
+            p.addLine(to: CGPoint(x: r.maxX - inset, y: r.minY + h * 0.12))
+            p.addLine(to: CGPoint(x: r.maxX - inset, y: r.maxY - h * 0.12))
+            p.addLine(to: CGPoint(x: r.maxX - inset - lip, y: r.maxY - h * 0.12))
+            p.move(to: CGPoint(x: c.x - w * 0.02, y: c.y - h * 0.16))
+            p.addLine(to: CGPoint(x: c.x + w * 0.02, y: c.y + h * 0.16))
         }
         return p
     }

@@ -9,6 +9,8 @@ final class TestWorld: Sendable {
         var files: [String: Data] = [:]
         var keychain: [String: Data] = [:]
         var stateDatabases: [String: [String: String]] = [:]
+        var queryResults: [String: String] = [:]
+        var queries: [(path: String, sql: String)] = []
         var env: [String: String] = [:]
         var responses: [String: [HTTPResponse]] = [:]
         var fallbackResponse: HTTPResponse?
@@ -63,6 +65,16 @@ final class TestWorld: Sendable {
         let path = home.appending(path: database).path(percentEncoded: false)
         state.withLock { $0.stateDatabases[path, default: [:]][key] = value }
     }
+
+    /// A SQLite database (path relative to home) that answers every query with `result`. The file
+    /// itself is registered too, so directory listings and existence checks see it.
+    func database(_ relativeToHome: String, result: String) {
+        file(relativeToHome, "sqlite")
+        let path = home.appending(path: relativeToHome).path(percentEncoded: false)
+        state.withLock { $0.queryResults[path] = result }
+    }
+
+    var queries: [(path: String, sql: String)] { state.withLock { $0.queries } }
 
     /// Queue a response for a URL; responses are consumed in order, the last one repeating.
     func respond(_ url: String, _ response: HTTPResponse) {
@@ -165,6 +177,22 @@ final class TestWorld: Sendable {
             stateDatabaseValue: { database, key in
                 let path = database.path(percentEncoded: false)
                 return world.state.withLock { $0.stateDatabases[path]?[key] }
+            },
+            directoryEntries: { directory in
+                let prefix = directory.path(percentEncoded: false) + "/"
+                return world.state.withLock { s in
+                    Set(s.files.keys.compactMap { path -> String? in
+                        guard path.hasPrefix(prefix) else { return nil }
+                        return path.dropFirst(prefix.count).split(separator: "/").first.map(String.init)
+                    }).sorted()
+                }
+            },
+            databaseQuery: { database, sql in
+                let path = database.path(percentEncoded: false)
+                return world.state.withLock { s in
+                    s.queries.append((path, sql))
+                    return s.queryResults[path]
+                }
             }
         )
     }

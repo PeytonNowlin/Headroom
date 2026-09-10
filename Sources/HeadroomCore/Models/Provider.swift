@@ -5,6 +5,7 @@ public enum ProviderID: String, Codable, CaseIterable, Sendable, Hashable, Ident
     case codex
     case grok
     case cursor
+    case opencode
 
     public var id: String { rawValue }
 
@@ -14,6 +15,7 @@ public enum ProviderID: String, Codable, CaseIterable, Sendable, Hashable, Ident
         case .codex: "Codex"
         case .grok: "Grok"
         case .cursor: "Cursor"
+        case .opencode: "OpenCode"
         }
     }
 
@@ -24,6 +26,7 @@ public enum ProviderID: String, Codable, CaseIterable, Sendable, Hashable, Ident
         case .codex: "codex"
         case .grok: "grok"
         case .cursor: "agent login"
+        case .opencode: "opencode auth login"
         }
     }
 
@@ -31,6 +34,7 @@ public enum ProviderID: String, Codable, CaseIterable, Sendable, Hashable, Ident
     public var reconnectHint: String {
         switch self {
         case .cursor: "Login expired — sign in to the Cursor app (or run `agent login`)"
+        case .opencode: "Login expired — run `opencode auth login` and pick OpenCode Go"
         default: "Login expired — run `\(signInCommand)` to reconnect"
         }
     }

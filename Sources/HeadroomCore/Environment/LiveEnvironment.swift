@@ -60,23 +60,32 @@ extension HostEnvironment {
                                                         withIntermediateDirectories: true)
                 try data.write(to: url, options: .atomic)
             },
-            stateDatabaseValue: { database, key in StateDatabase.value(in: database, key: key) }
+            stateDatabaseValue: { database, key in StateDatabase.value(in: database, key: key) },
+            directoryEntries: { directory in
+                (try? FileManager.default.contentsOfDirectory(atPath: directory.path(percentEncoded: false))) ?? []
+            },
+            databaseQuery: { database, sql in StateDatabase.query(database, sql) }
         )
     }
 }
 
 enum StateDatabase {
     /// Reads one `ItemTable` row with the system `sqlite3` opened read-only, so the editor that
-    /// owns the database never sees a writer. The key is passed as a bound parameter via
-    /// `.parameter`, never interpolated.
+    /// owns the database never sees a writer. The key is escaped, never concatenated raw.
     static func value(in database: URL, key: String) -> String? {
+        let escaped = key.replacingOccurrences(of: "'", with: "''")
+        return query(database, "SELECT value FROM ItemTable WHERE key = '\(escaped)' LIMIT 1;")
+    }
+
+    /// Runs one read-only query with the system `sqlite3` and returns its single-column output.
+    /// Callers own the SQL: it must never interpolate untrusted input. Blocking — call it off the
+    /// main thread (every caller is inside an actor).
+    static func query(_ database: URL, _ sql: String) -> String? {
         let path = database.path(percentEncoded: false)
         guard FileManager.default.fileExists(atPath: path) else { return nil }
         let process = Process()
         process.executableURL = URL(filePath: "/usr/bin/sqlite3")
-        let escaped = key.replacingOccurrences(of: "'", with: "''")
-        process.arguments = ["-readonly", "-noheader", "-list", path,
-                             "SELECT value FROM ItemTable WHERE key = '\(escaped)' LIMIT 1;"]
+        process.arguments = ["-readonly", "-noheader", "-list", path, sql]
         let out = Pipe()
         process.standardOutput = out
         process.standardError = FileHandle.nullDevice

@@ -4,6 +4,13 @@ All notable changes to Headroom. The format follows [Keep a Changelog](https://k
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-09-10
+
+### Added
+
+- OpenCode Go as a tracked provider: Session, Weekly, and Monthly quota windows from OpenCode's own usage API, read with the `opencode-go` key the OpenCode CLI already holds. Accounts on Zen pay-as-you-go stay connected and show spend only, with a note explaining the missing rings.
+- OpenCode spend tiles and trends, summed from the per-message cost OpenCode records in its local database (all release channels). The database is opened read-only off the main thread, on the same background cadence as Cursor spend.
+
 ## [0.4.2] - 2026-09-08
 
 ### Fixed
