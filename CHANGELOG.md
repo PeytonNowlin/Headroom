@@ -4,6 +4,10 @@ All notable changes to Headroom. The format follows [Keep a Changelog](https://k
 
 ## [Unreleased]
 
+### Fixed
+
+- Guard integer parsing of provider JSON so a malformed or out-of-range value cannot crash a refresh.
+
 ## [0.5.0] - 2026-09-10
 
 ### Added

@@ -61,7 +61,13 @@ public enum JSON: Sendable, Equatable {
         }
     }
 
-    public var int: Int? { double.map { Int($0) } }
+    /// Truncates toward zero, but returns nil instead of trapping for non-finite or out-of-`Int`
+    /// values, which a malformed provider payload can carry (e.g. `"1e400"` or `1e300`).
+    public var int: Int? {
+        guard let n = double, n.isFinite,
+              n > Double(Int.min), n < Double(Int.max) else { return nil }
+        return Int(n)
+    }
 
     public var bool: Bool? {
         if case let .bool(b) = self { return b }
