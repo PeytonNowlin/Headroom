@@ -10,17 +10,13 @@ APP="${1:-build/Headroom.app}"
   exit 1
 }
 
-for bundle in Headroom_HeadroomCore.bundle KeyboardShortcuts_KeyboardShortcuts.bundle; do
+# HeadroomCore carries no resources since token pricing was removed; KeyboardShortcuts still does.
+for bundle in KeyboardShortcuts_KeyboardShortcuts.bundle; do
   [[ -d "$APP/Contents/Resources/$bundle" ]] || {
     echo "missing SwiftPM resource bundle: $APP/Contents/Resources/$bundle" >&2
     exit 1
   }
 done
-
-[[ -f "$APP/Contents/Resources/Headroom_HeadroomCore.bundle/Contents/Resources/pricing.json" ]] || {
-  echo "missing bundled pricing data" >&2
-  exit 1
-}
 
 # Native SwiftPM builds bake the developer's absolute .build path into the
 # resource accessor. Such an app appears healthy only on the build machine.

@@ -8,20 +8,11 @@ import Observation
 @Observable
 final class UsageModel {
     private(set) var states: [ProviderID: ProviderState] = [:]
-    private(set) var spend: [ProviderID: SpendSummary] = [:]
-    private(set) var trends: [ProviderID: [SpendPeriod: SpendTrend]] = [:]
     private(set) var resetSignals: [ProviderID: Date] = [:]
     var onAlert: ((UsageAlert) -> Void)?
     private var visibleSurfaces: Set<String> = []
     private var clockTask: Task<Void, Never>?
-    private var spendTimerTask: Task<Void, Never>?
     private var started = false
-    private var spendScanTask: Task<Void, Never>?
-    private var lastSpendScanAt: Date?
-    /// Providers the last rescan expected spend from: local logs, or a Cursor login. Captured
-    /// there, never derived in a view: the checks behind it shell out (sqlite3, security) and
-    /// must stay off the main thread and out of SwiftUI body evaluation.
-    private(set) var spendProviders: [ProviderID] = []
     private(set) var now = Date()
     /// The banner currently showing, if any; further alerts queue behind it.
     private(set) var activeAlert: UsageAlert?
@@ -33,20 +24,12 @@ final class UsageModel {
     let environment: HostEnvironment
     let preferences: Preferences
     private var pollers: [ProviderID: ProviderPoller] = [:]
-    private var scanners: [ProviderID: SpendScanner] = [:]
-    private let cursorSpend: CursorSpendSource
-    private let openCodeSpend: OpenCodeSpendSource
-    private let pricing: PricingStore
     private var tasks: [Task<Void, Never>] = []
-    static let spendInterval: Duration = .seconds(120)
 
     init(environment: HostEnvironment = .live(), preferences: Preferences = Preferences()) {
         self.environment = environment
         self.now = environment.now()
         self.preferences = preferences
-        pricing = PricingStore(environment: environment)
-        cursorSpend = CursorSpendSource(environment: environment)
-        openCodeSpend = OpenCodeSpendSource(environment: environment)
         alertLedger = Self.loadLedger(environment)
         if let data = try? environment.readFile(environment.dataDirectory.appending(path: "quota-history.json")),
            let history = try? JSONDecoder().decode(UsageHistory.self, from: data) {
@@ -61,10 +44,6 @@ final class UsageModel {
             CursorProvider(environment: environment),
             OpenCodeProvider(environment: environment),
         ]
-        let formats: [any UsageLogFormat] = [ClaudeLogFormat(), CodexLogFormat(), GrokLogFormat()]
-        for format in formats {
-            scanners[format.provider] = SpendScanner(format: format, environment: environment)
-        }
         let store = SnapshotStore(environment: environment)
         let restored = store.load()
         for runtime in runtimes {
@@ -103,8 +82,6 @@ final class UsageModel {
         restartClock()
     }
 
-    var localScanInterval: Duration { visibleSurfaces.isEmpty ? .seconds(300) : Self.spendInterval }
-
     var clockInterval: Duration { visibleSurfaces.isEmpty ? .seconds(60) : .seconds(1) }
 
     func setSurfaceVisible(_ name: String, _ visible: Bool) {
@@ -114,9 +91,7 @@ final class UsageModel {
         now = environment.now()
         if wasIdle != visibleSurfaces.isEmpty {
             restartClock()
-            if started { restartSpendTimer() }
         }
-        if visible { Task { await rescanSpend() } }
     }
 
     private func restartClock() {
@@ -133,7 +108,6 @@ final class UsageModel {
 
     isolated deinit {
         clockTask?.cancel()
-        spendTimerTask?.cancel()
     }
 
     func start() {
@@ -142,25 +116,12 @@ final class UsageModel {
         for poller in pollers.values {
             Task { await poller.start() }
         }
-        restartSpendTimer()
-    }
-
-    private func restartSpendTimer() {
-        spendTimerTask?.cancel()
-        let interval = localScanInterval
-        spendTimerTask = Task(priority: .utility) { [weak self] in
-            while !Task.isCancelled {
-                await self?.rescanSpend()
-                do { try await Task.sleep(for: interval) } catch { return }
-            }
-        }
     }
 
     func refreshAll() {
         for poller in pollers.values {
             Task { await poller.refreshNow() }
         }
-        Task { await rescanSpend(force: true) }
     }
 
     func refresh(_ provider: ProviderID) {
@@ -208,65 +169,6 @@ final class UsageModel {
         if alert.kind == .quotaReturned { return options.notifyOnReset }
         guard options.warningsEnabled else { return false }
         return !options.isSnoozed(provider: alert.provider, window: window)
-    }
-
-    func trend(provider: ProviderID?, period: SpendPeriod) -> SpendTrend? {
-        if let provider { return trends[provider]?[period] }
-        return SpendTrend.combine(spendProviders.compactMap { trends[$0]?[period] })
-    }
-
-    func rescanSpend(force: Bool = false) async {
-        if let task = spendScanTask { await task.value; return }
-        if !force, let lastSpendScanAt, environment.now().timeIntervalSince(lastSpendScanAt) < 30 { return }
-        let task = Task { await scanSpend() }
-        spendScanTask = task
-        await task.value
-        lastSpendScanAt = environment.now()
-        spendScanTask = nil
-    }
-
-    private func scanSpend() async {
-        let table = await pricing.refreshIfNeeded()
-        let calendar = environment.calendar
-        var expected: [ProviderID] = []
-        for (id, scanner) in scanners {
-            guard scanner.hasLogs() else { continue }
-            expected.append(id)
-            let ledger = await scanner.scan()
-            updateSpend(ledger, for: id, pricing: table, calendar: calendar)
-        }
-        // `ledger()` is nil only without a login; the token read happens inside the actor.
-        if let ledger = await cursorSpend.ledger() {
-            expected.append(.cursor)
-            updateSpend(ledger, for: .cursor, pricing: table, calendar: calendar)
-        }
-        // Same shape as Cursor: the SQLite reads stay inside the actor, off the main thread.
-        if let ledger = await openCodeSpend.ledger() {
-            expected.append(.opencode)
-            updateSpend(ledger, for: .opencode, pricing: table, calendar: calendar)
-        }
-        spend = spend.filter { expected.contains($0.key) }
-        trends = trends.filter { expected.contains($0.key) }
-        spendProviders = expected
-    }
-
-    private func updateSpend(_ ledger: SpendLedger, for provider: ProviderID, pricing: PricingTable, calendar: Calendar) {
-        let date = environment.now()
-        spend[provider] = SpendSummarizer.summarize(ledger, pricing: pricing, now: date, calendar: calendar)
-        let updated = Dictionary(uniqueKeysWithValues: SpendPeriod.allCases.map {
-            ($0, SpendTrend.make(ledger, pricing: pricing, now: date, calendar: calendar, period: $0))
-        })
-        if trends[provider] != updated { trends[provider] = updated }
-    }
-
-    /// Sum across every provider with spend. Nil until a rescan has completed with all of them
-    /// reported, so a first-launch scan still in progress never shows a partial number as the total.
-    var totalSpend: SpendSummary? {
-        let expected = spendProviders
-        guard !expected.isEmpty, expected.allSatisfy({ spend[$0] != nil }) else { return nil }
-        let all = expected.compactMap { spend[$0] }
-        guard let first = all.first else { return nil }
-        return all.dropFirst().reduce(first, +)
     }
 
     // MARK: - Alerts
@@ -333,29 +235,51 @@ final class UsageModel {
         return state.hasCredentials || state.isRefreshing
     }
 
-    /// Providers to draw, in the user's order, honoring per-provider visibility overrides.
+    /// Providers to draw, in the user's order: signed in, and not hidden. A provider you are
+    /// not signed into has nothing to say, so there is no "always show".
     var visibleProviders: [ProviderID] {
-        preferences.order.filter { id in
-            switch preferences.visibility(id) {
-            case .show: true
-            case .hide: false
-            case .auto: isDetected(id)
-            }
-        }
+        preferences.order.filter { preferences.tier($0) != .hidden && isDetected($0) }
     }
 
-    /// Providers that get a compact dot: only those with a quota (or an expired/failing login)
-    /// to summarize. The first half sit left of the notch, the rest right.
-    var dotProviders: [ProviderID] {
-        visibleProviders.filter { ProviderDot.shows(state: states[$0], status: status($0)) }
+    /// Main agents — the ones whose quota actually stops your work. These alone decide whether
+    /// the island appears at all.
+    var mainProviders: [ProviderID] {
+        visibleProviders.filter { preferences.tier($0) == .main }
     }
 
-    enum DotSide { case left, right, none }
+    /// Side providers: research, one-offs, anything you would not notice running out.
+    var secondaryProviders: [ProviderID] {
+        visibleProviders.filter { preferences.tier($0) == .secondary }
+    }
 
-    func dotSide(_ id: ProviderID) -> DotSide {
-        let dots = dotProviders
-        guard let index = dots.firstIndex(of: id) else { return .none }
-        return index < (dots.count + 1) / 2 ? .left : .right
+    /// Whether this provider has something a person needs to know: quota past the first urgency
+    /// step, or a login that stopped working. Everything else is silence.
+    func isSpeaking(_ id: ProviderID) -> Bool {
+        guard let state = states[id] else { return false }
+        if status(id) == .expired || state.isErrored { return true }
+        guard let used = state.snapshot?.ringUsedPercent else { return false }
+        return Urgency(usedPercent: used) != .fine
+    }
+
+    /// Gauges the band shows, left of the notch: the main agents that are speaking.
+    var compactMain: [ProviderID] { mainProviders.filter(isSpeaking) }
+
+    /// Gauges the band shows, right of the notch: side providers that are speaking. They ride
+    /// along once the island is up, but never summon it on their own.
+    var compactSecondary: [ProviderID] {
+        compactMain.isEmpty ? [] : secondaryProviders.filter(isSpeaking)
+    }
+
+    /// Nothing to say: no main agent is near its limit and none is broken. The island draws
+    /// nothing at all until that changes.
+    var isDormant: Bool { compactMain.isEmpty }
+
+    enum GaugeSide { case left, right, none }
+
+    func gaugeSide(_ id: ProviderID) -> GaugeSide {
+        if compactMain.contains(id) { return .left }
+        if compactSecondary.contains(id) { return .right }
+        return .none
     }
 
     /// The soonest scheduled refresh across visible providers.

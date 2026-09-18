@@ -10,23 +10,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var fullScreen: FullScreenObserver?
     private var updater: UpdateController?
     private var notifications: NotificationController?
-    private var trends: TrendsWindowController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let model = UsageModel()
         let island = IslandController(model: model)
         let updater = UpdateController()
         let notifications = NotificationController(preferences: model.preferences)
-        let trends = TrendsWindowController(model: model)
         let settings = SettingsWindowController(model: model, updater: updater, notifications: notifications)
         let statusItem = StatusItemController()
         let fullScreen = FullScreenObserver()
 
         island.onOpenSettings = { settings.show() }
-        island.onOpenTrends = { trends.show(provider: $0) }
         island.onCheckForUpdates = { updater.checkForUpdates() }
-        settings.onOpenTrends = { trends.show() }
-        statusItem.onTrends = { trends.show() }
         statusItem.onUpdates = { updater.checkForUpdates() }
         model.onAlert = { [weak notifications] alert in notifications?.deliver(alert) }
         notifications.onOpenProvider = { [weak island] in island?.openProvider($0) }
@@ -56,7 +51,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.fullScreen = fullScreen
         self.updater = updater
         self.notifications = notifications
-        self.trends = trends
         observePreferences()
     }
 

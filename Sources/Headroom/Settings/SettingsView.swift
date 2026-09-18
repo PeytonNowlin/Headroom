@@ -7,52 +7,28 @@ struct SettingsView: View {
     @Bindable var preferences: Preferences
     var updater: UpdateController?
     var notifications: NotificationController?
-    var onOpenTrends: () -> Void = {}
-    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
-                updates
                 providers
                 connections
                 alerts
-                legend
                 behavior
+                updates
                 about
             }
             .padding(22)
         }
         .frame(width: 520)
-        .frame(minHeight: 520, idealHeight: 620)
+        .frame(minHeight: 480, idealHeight: 560)
         .background(.regularMaterial)
-    }
-
-    @ViewBuilder
-    private var updates: some View {
-        if let updater {
-            Section("App updates", footnote: "Update downloads are verified before installation. You choose when to install and restart.") {
-                VStack(alignment: .leading, spacing: 10) {
-                    Button("Check for Updates…") { updater.checkForUpdates() }
-                        .disabled(!updater.canCheck)
-                    Toggle("Automatically check for updates", isOn: Binding(
-                        get: { updater.automaticallyChecks },
-                        set: { updater.setAutomaticallyChecks($0) }
-                    ))
-                    .disabled(!updater.isAvailable)
-                    Button("Usage Trends…", action: onOpenTrends)
-                }
-                .font(.system(size: 12))
-                .toggleStyle(.switch)
-                .controlSize(.small)
-            }
-        }
     }
 
     // MARK: - Providers
 
     private var providers: some View {
-        Section("Providers", footnote: "Automatic shows a provider when its CLI is signed in. Drag to reorder; the order sets ring and dot positions.") {
+        Section("Providers", footnote: "Main agents decide whether the island appears at all — when they have room, nothing is drawn. Side providers ride along once it is up. Drag to reorder.") {
             List {
                 ForEach(preferences.order) { id in
                     ProviderRow(id: id, model: model, preferences: preferences)
@@ -83,97 +59,29 @@ struct SettingsView: View {
         }
     }
 
+    /// One switch. Warnings themselves are not configurable: they fire near the edge, once per
+    /// window, and each provider's drill-in can quiet it until that quota comes back.
+    @ViewBuilder
     private var alerts: some View {
-        Section("Quota alerts", footnote: "Warnings appear at 80% and 95% used, or when a steady recent pace may exhaust quota. Quota-return banners require a confirmed reset after usage reached 80%. Snooze applies to each current window until its own reset.") {
-            VStack(alignment: .leading, spacing: 14) {
-                if let notifications {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Toggle("Also send macOS notifications", isOn: Binding(
-                            get: { notifications.enabled },
-                            set: { enabled in Task { await notifications.setEnabled(enabled) } }
-                        ))
-                        .disabled(notifications.permissionRequestInFlight)
-                        Text(notifications.statusText).font(.caption).foregroundStyle(.secondary)
-                        Button("Notification Settings…") { notifications.openSystemSettings() }
-                            .buttonStyle(.link)
-                    }
-                    Divider()
+        if let notifications {
+            Section("Alerts", footnote: "Warnings appear in the island near the edge of a quota window. Turn this on to get them as macOS notifications too.") {
+                VStack(alignment: .leading, spacing: 6) {
+                    Toggle("Send macOS notifications", isOn: Binding(
+                        get: { notifications.enabled },
+                        set: { enabled in Task { await notifications.setEnabled(enabled) } }
+                    ))
+                    .disabled(notifications.permissionRequestInFlight)
+                    Text(notifications.statusText).font(.caption).foregroundStyle(.secondary)
+                    Button("Notification Settings…") { notifications.openSystemSettings() }
+                        .buttonStyle(.link)
                 }
-                ForEach(preferences.order) { id in
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(id.displayName).fontWeight(.medium)
-                        Toggle("Quota warnings", isOn: Binding(
-                            get: { preferences.alertOptions(id).warningsEnabled },
-                            set: { value in
-                                var options = preferences.alertOptions(id)
-                                options.warningsEnabled = value
-                                model.setAlertOptions(options, for: id)
-                            }
-                        ))
-                        Toggle("Alert when quota returns", isOn: Binding(
-                            get: { preferences.alertOptions(id).notifyOnReset },
-                            set: { value in
-                                var options = preferences.alertOptions(id)
-                                options.notifyOnReset = value
-                                model.setAlertOptions(options, for: id)
-                            }
-                        ))
-                        if preferences.alertOptions(id).warningsEnabled {
-                            Button(model.alertsSnoozed(id) ? "Resume warnings" : "Snooze until reset") {
-                                if model.alertsSnoozed(id) { model.resumeAlerts(id) }
-                                else { model.snoozeAlerts(id) }
-                            }
-                            .disabled(model.state(id)?.snapshot?.windows.contains { ($0.resetsAt.map { $0 > model.now } ?? false) } != true)
-                        }
-                    }
-                    .accessibilityElement(children: .contain)
-                    .accessibilityLabel(id.displayName + " alerts")
-                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .font(.system(size: 12))
+                .toggleStyle(.switch)
+                .controlSize(.small)
+                .padding(12)
+                .background(.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 10))
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .font(.system(size: 12))
-            .toggleStyle(.switch)
-            .controlSize(.small)
-            .padding(12)
-            .background(.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 10))
-        }
-    }
-
-    // MARK: - Legend
-
-    private var legend: some View {
-        Section("Gauge & ring colors", footnote: "Compact gauges drain as the most-constrained quota is used. An empty ring means no headroom; ! indicates a connection problem. Faded gauges show saved usage. Hover for context, or click to open the provider. A brief pulse marks confirmed quota recovery.") {
-            HStack(spacing: 10) {
-                legendItem(.fine, "< 40%")
-                legendItem(.watch, "40–69%")
-                legendItem(.warn, "70–89%")
-                legendItem(.critical, "90%+")
-                Spacer()
-                HStack(spacing: 6) {
-                    Text("!").font(.system(size: 11, weight: .heavy)).foregroundStyle(.secondary)
-                    Text("Login expired").font(.system(size: 11)).foregroundStyle(.secondary)
-                }
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
-            .background(.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-        }
-    }
-
-    private func legendItem(_ urgency: Urgency, _ label: String) -> some View {
-        HStack(spacing: 6) {
-            Group {
-                switch urgency {
-                case .fine: Circle().frame(width: 8, height: 8)
-                case .watch: Circle().strokeBorder(lineWidth: 1.5).frame(width: 8, height: 8)
-                case .warn: Capsule().frame(width: 8, height: 3)
-                case .critical: Text("!").font(.system(size: 11, weight: .heavy))
-                }
-            }
-            .foregroundStyle(urgency.color(for: scheme))
-            .frame(width: 8, height: 10)
-            .accessibilityHidden(true)
-            Text(label).font(.system(size: 11)).foregroundStyle(.secondary)
         }
     }
 
@@ -195,7 +103,7 @@ struct SettingsView: View {
                 Divider().padding(.leading, 12)
                 settingRow {
                     HStack {
-                        Text("Toggle island")
+                        Text("Summon island")
                         Spacer()
                         KeyboardShortcuts.Recorder(for: .toggleIsland)
                     }
@@ -212,6 +120,26 @@ struct SettingsView: View {
             .font(.system(size: 12.5))
             .padding(.horizontal, 12)
             .frame(height: 38)
+    }
+
+    @ViewBuilder
+    private var updates: some View {
+        if let updater {
+            Section("App updates", footnote: "Update downloads are verified before installation. You choose when to install and restart.") {
+                VStack(alignment: .leading, spacing: 10) {
+                    Button("Check for Updates…") { updater.checkForUpdates() }
+                        .disabled(!updater.canCheck)
+                    Toggle("Automatically check for updates", isOn: Binding(
+                        get: { updater.automaticallyChecks },
+                        set: { updater.setAutomaticallyChecks($0) }
+                    ))
+                    .disabled(!updater.isAvailable)
+                }
+                .font(.system(size: 12))
+                .toggleStyle(.switch)
+                .controlSize(.small)
+            }
+        }
     }
 
     // MARK: - About
@@ -271,21 +199,20 @@ private struct ProviderRow: View {
     let id: ProviderID
     var model: UsageModel
     @Bindable var preferences: Preferences
-    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         let state = model.state(id)
         let status = model.status(id)
         HStack(spacing: 10) {
-            // The exact dot this provider shows beside the notch, live.
+            // The exact gauge this provider shows beside the notch, live.
             Group {
-                if ProviderDot.shows(state: state, status: status) {
-                    ProviderDot(state: state, status: status)
+                if CompactGauge.shows(state: state, status: status) {
+                    CompactGauge(provider: id, state: state, status: status, size: 14)
                 } else {
-                    Circle().strokeBorder(.secondary.opacity(0.3), lineWidth: 1)
+                    Circle().strokeBorder(.secondary.opacity(0.3), lineWidth: 1).frame(width: 12, height: 12)
                 }
             }
-            .frame(width: 8, height: 10)
+            .frame(width: 16)
             ProviderGlyph(provider: id, size: 12)
                 .frame(width: 16)
             VStack(alignment: .leading, spacing: 1) {
@@ -296,14 +223,16 @@ private struct ProviderRow: View {
             }
             Spacer()
             Picker("", selection: Binding(
-                get: { preferences.visibility(id) },
-                set: { preferences.setVisibility($0, for: id) }
+                get: { preferences.tier(id) },
+                set: { preferences.setTier($0, for: id) }
             )) {
-                ForEach(ProviderVisibility.allCases, id: \.self) { Text($0.title).tag($0) }
+                ForEach(ProviderTier.allCases, id: \.self) { Text($0.title).tag($0) }
             }
+            .pickerStyle(.segmented)
             .labelsHidden()
             .controlSize(.small)
-            .frame(width: 120)
+            .frame(width: 176)
+            .accessibilityLabel("\(id.displayName) importance")
         }
         .padding(.horizontal, 10)
         .frame(height: 40)
@@ -313,15 +242,13 @@ private struct ProviderRow: View {
 
     private func subtitle(state: ProviderState?, status: ConnectionStatus) -> String {
         var parts: [String] = []
-        switch model.dotSide(id) {
-        case .left: parts.append("Dot left of notch")
-        case .right: parts.append("Dot right of notch")
-        case .none: parts.append(model.visibleProviders.contains(id) ? "No dot — no quota data" : "Not detected")
-        }
         if let plan = state?.snapshot?.planName { parts.append(plan) }
-        if status == .expired { parts.append("login expired") }
-        if let used = state?.snapshot?.ringUsedPercent, status != .expired {
+        if status == .expired {
+            parts.append("login expired")
+        } else if let used = state?.snapshot?.ringUsedPercent {
             parts.append("\(Int((100 - used).rounded()))% left")
+        } else if !model.isDetected(id) {
+            parts.append("not signed in")
         }
         return parts.joined(separator: " · ")
     }

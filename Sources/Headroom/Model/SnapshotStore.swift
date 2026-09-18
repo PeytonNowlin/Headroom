@@ -13,9 +13,16 @@ struct SnapshotStore {
     let environment: HostEnvironment
     private var url: URL { environment.dataDirectory.appending(path: "snapshots.json") }
 
+    /// Matches `save`: ISO 8601 dates, the format every snapshot on disk was written with.
+    private var decoder: JSONDecoder {
+        let d = JSONDecoder()
+        d.dateDecodingStrategy = .iso8601
+        return d
+    }
+
     func load() -> [ProviderID: Entry] {
         guard let data = try? environment.readFile(url) else { return [:] }
-        let decoder = JSONDecoder.pricing
+        let decoder = decoder
         var out: [ProviderID: Entry] = [:]
         if let decoded = try? decoder.decode([String: Entry].self, from: data) {
             for (key, entry) in decoded {

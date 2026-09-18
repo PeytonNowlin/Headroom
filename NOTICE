@@ -4,11 +4,10 @@ Portions of this software are derived from the following MIT-licensed projects:
 
 OpenUsage — https://github.com/robinebers/openusage
 Copyright (c) 2026 Robin Ebers
-Provider credential discovery, usage-API mapping, and local session-log spend
-parsing for Claude, Codex, Grok, and Cursor are ported from OpenUsage, as is the
-Cursor usage-export CSV parser. The bundled pricing supplement
-(Sources/HeadroomCore/Resources/pricing-supplement.json) is OpenUsage's
-published price list for models absent from public catalogs.
+Provider credential discovery and usage-API mapping for Claude, Codex, Grok, and
+Cursor are ported from OpenUsage. The session-log spend parsing, Cursor
+usage-export CSV parser, and bundled pricing supplement also ported from
+OpenUsage were removed along with Headroom's estimated token value feature.
 
 Tokenly — https://github.com/itsSwanks/tokenly
 Copyright (c) 2026 Tokenly contributors

@@ -3,13 +3,12 @@ import SwiftUI
 
 /// The SwiftUI root of the island. Draws the silhouette for the current mode and lays content
 /// inside it. Compact on a notch is bezel-black so it reads as part of the notch; everything
-/// else is Liquid Glass.
+/// else is Liquid Glass. Dormant draws nothing at all.
 struct IslandView: View {
     @Bindable var state: IslandState
     var model: UsageModel
     var onSelect: (ProviderID?) -> Void = { _ in }
     var onOpenSettings: () -> Void = {}
-    var onOpenTrends: (ProviderID?) -> Void = { _ in }
     @FocusState private var focusedProvider: ProviderID?
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -33,7 +32,8 @@ struct IslandView: View {
             // The glass is permanent and untouched: never inserted or removed, never masked, never
             // faded. Any of those makes Core Animation rasterize its backdrop layer offscreen, where
             // it can't sample the desktop, and the island (or the whole panel) paints black. So the
-            // bezel is an opaque overlay on top of it, and only the content is clipped.
+            // bezel is an opaque overlay on top of it, only the content is clipped, and a dormant
+            // island is made to vanish by giving it zero height rather than by hiding the glass.
             Color.clear
                 .glassEffect(.regular, in: shape)
             if isBlack {
@@ -55,7 +55,7 @@ struct IslandView: View {
                     Text(providerDescription(provider)).font(.caption)
                 }
                 .padding(10)
-                .frame(width: 260, alignment: .leading)
+                .frame(width: 240, alignment: .leading)
                 .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
                 .padding(.top, size.height + 6)
                 .allowsHitTesting(false)
@@ -70,7 +70,7 @@ struct IslandView: View {
             }
         }
         .animation(Motion.island, value: state.mode)
-        .animation(Motion.island, value: state.detailHeight)
+        .animation(Motion.island, value: state.content)
         .animation(Motion.island, value: model.activeAlert?.id)
         .onChange(of: state.focusedProvider) { _, id in focusedProvider = id }
         .onChange(of: focusedProvider) { _, id in
@@ -89,6 +89,8 @@ struct IslandView: View {
     @ViewBuilder
     private var content: some View {
         switch state.mode {
+        case .dormant:
+            Color.clear
         case .compact:
             compactContent
         case .expanded:
@@ -102,45 +104,45 @@ struct IslandView: View {
 
     // MARK: - Compact
 
+    /// Only the providers with something to say, main agents left of the notch and side
+    /// providers right of it. Geometry mirrored in `IslandGeometry.compactProvider`.
     private var compactContent: some View {
-        let providers = model.dotProviders
-        let split = (providers.count + 1) / 2
-        return HStack(spacing: 0) {
-            HStack(spacing: 4) {
-                ForEach(providers.prefix(split)) { dot($0) }
+        HStack(spacing: 0) {
+            HStack(spacing: CompactMetrics.spacing) {
+                ForEach(model.compactMain) { gauge($0, size: CompactMetrics.mainSize) }
             }
+            .padding(.trailing, CompactMetrics.notchInset)
             .frame(maxWidth: .infinity, alignment: .trailing)
             Color.clear.frame(width: state.layout.anchor.compactGap)
-            HStack(spacing: 4) {
-                ForEach(providers.dropFirst(split)) { dot($0) }
+            HStack(spacing: CompactMetrics.spacing) {
+                ForEach(model.compactSecondary) { gauge($0, size: CompactMetrics.secondarySize) }
             }
+            .padding(.leading, CompactMetrics.notchInset)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(.horizontal, 14)
-        .frame(width: state.layout.compact.width, height: state.layout.compact.height)
+        .frame(width: state.currentSize.width, height: state.layout.compact.height)
     }
 
     private func providerDescription(_ id: ProviderID) -> String {
         let state = model.state(id)
-        var parts = [quotaDescription(id), state?.freshness(at: model.now) ?? "Not signed in"]
-        if let window = state?.snapshot?.limitingWindow {
-            parts.append(window.title)
-            parts.append(window.resetsAt.map {
-                $0 > model.now ? "Resets in \(Formatting.countdown(to: $0, from: model.now))" : "Awaiting reset"
-            } ?? "Reset not reported")
+        var parts = [quotaDescription(id)]
+        if let window = state?.snapshot?.limitingWindow, let resets = window.resetsAt, resets > model.now {
+            parts.append("back in \(Formatting.countdown(to: resets, from: model.now))")
         }
-        return parts.joined(separator: ", ")
+        if model.status(id) == .expired { parts.append("login expired") }
+        else if state?.lastError != nil { parts.append("can't reach it") }
+        return parts.joined(separator: " · ")
     }
 
     private func quotaDescription(_ id: ProviderID) -> String {
-        guard let remaining = model.state(id)?.snapshot?.ringRemainingPercent else { return "Quota unavailable" }
-        return "\(Int(remaining.rounded())) percent remaining"
+        guard let remaining = model.state(id)?.snapshot?.ringRemainingPercent else { return "No quota reported" }
+        return "\(Int(remaining.rounded()))% left"
     }
 
-    private func dot(_ id: ProviderID) -> some View {
+    private func gauge(_ id: ProviderID, size: CGFloat) -> some View {
         Button { onSelect(id) } label: {
-            ProviderDot(state: model.state(id), status: model.status(id), resetAt: model.resetSignals[id])
-                .frame(width: 14, height: 14)
+            CompactGauge(provider: id, state: model.state(id), status: model.status(id),
+                         size: size, resetAt: model.resetSignals[id])
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -155,88 +157,29 @@ struct IslandView: View {
     private var expandedContent: some View {
         VStack(spacing: 0) {
             notchSpacer
-            let providers = model.visibleProviders
-            if providers.isEmpty {
-                VStack(spacing: 8) {
-                    Text("Headroom")
-                        .font(.system(size: 15, weight: .semibold, design: .rounded))
-                    Text("Connect Claude, Codex, Grok, or Cursor in Settings to see your available quota.")
-                        .font(.system(size: 11.5))
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .padding(.horizontal, 24)
-                    Button("Set up providers…", action: onOpenSettings)
-                        .controlSize(.small)
-                        .buttonStyle(.glass)
-                        .padding(.top, 2)
-                    Button("Check again") { model.refreshAll() }
-                        .controlSize(.small)
-                        .disabled(model.isAnyRefreshing)
-                }
-                .padding(.top, 16)
+            if model.visibleProviders.isEmpty {
+                emptyState
             } else {
-                HStack(alignment: .top, spacing: 12) {
-                    ForEach(providers) { id in
-                        Button {
-                            onSelect(id)
-                        } label: {
-                            VStack(spacing: 6) {
-                                RingView(provider: id, state: model.state(id), status: model.status(id))
-                                Text(id.displayName)
-                                    .font(.system(size: 11, weight: .medium))
-                                    .foregroundStyle(.secondary)
-                                if let window = model.state(id)?.snapshot?.limitingWindow,
-                                   model.status(id) != .expired {
-                                    Text(window.title)
-                                        .font(.system(size: 10, weight: .medium))
-                                        .lineLimit(2)
-                                        .fixedSize(horizontal: false, vertical: true)
-                                    Text(window.resetsAt.map { $0 > model.now ? "Resets in \(Formatting.countdown(to: $0, from: model.now))" : "Awaiting reset" } ?? "Reset not reported")
-                                        .font(.system(size: 9.5))
-                                        .foregroundStyle(.secondary)
-                                        .lineLimit(2)
-                                }
-                                Text(model.state(id)?.freshness(at: model.now) ?? "Not signed in")
-                                    .font(.system(size: 9.5))
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(3)
-                                    .fixedSize(horizontal: false, vertical: true)
-                            }
-                            .multilineTextAlignment(.center)
-                            .frame(width: 90)
-                            .contentShape(Rectangle())
+                VStack(spacing: 14) {
+                    if !model.mainProviders.isEmpty {
+                        HStack(alignment: .top, spacing: 12) {
+                            ForEach(model.mainProviders) { mainTile($0) }
                         }
-                        .buttonStyle(LiftButtonStyle())
-                        .focusable()
-                        .focused($focusedProvider, equals: id)
-                        .focusEffectDisabled()
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 12)
-                                .stroke(Color.accentColor, lineWidth: 2)
-                                .padding(-4)
-                                .opacity(state.keyboardNavigation && state.focusedProvider == id ? 1 : 0)
-                                .allowsHitTesting(false)
+                    }
+                    if !model.secondaryProviders.isEmpty {
+                        HStack(spacing: 14) {
+                            ForEach(model.secondaryProviders) { sideTile($0) }
                         }
-                        .accessibilityLabel(id.displayName)
-                        .accessibilityValue(providerDescription(id))
-                        .accessibilityHint("Open quota details for \(id.displayName)")
                     }
                 }
-                .padding(.top, 18)
-            }
-            Spacer(minLength: 0)
-            if let total = model.totalSpend {
-                Button { onOpenTrends(nil) } label: { SpendFooter(summary: total) }
-                    .buttonStyle(.plain)
-                    .focusable()
-                    .onKeyPress(keys: [.return, .space], phases: .down) { _ in onOpenTrends(nil); return .handled }
-                    .help("Open usage trends")
-                    .accessibilityLabel("Usage trends, estimated token value")
-                    .transition(.opacity)
+                .padding(.top, 16)
+                .padding(.horizontal, 14)
             }
         }
-        .padding(.bottom, 12)
+        .padding(.bottom, 14)
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
+            state.content.expandedHeight = height
+        }
         .overlay(alignment: .topTrailing) {
             if state.pinned {
                 Image(systemName: "pin.fill")
@@ -253,7 +196,90 @@ struct IslandView: View {
                 .padding(.top, state.layout.anchor.notchHeight + 7)
                 .padding(.leading, 12)
         }
-        .frame(width: state.layout.expandedWidth, height: state.layout.expandedHeight)
+        .frame(width: state.layout.expandedWidth)
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: 8) {
+            Text("Headroom")
+                .font(.system(size: 15, weight: .semibold, design: .rounded))
+            Text("Sign in to Claude, Codex, Grok, Cursor, or OpenCode and their quota shows up here.")
+                .font(.system(size: 11.5))
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 24)
+            Button("Set up providers…", action: onOpenSettings)
+                .controlSize(.small)
+                .buttonStyle(.glass)
+                .padding(.top, 2)
+            Button("Check again") { model.refreshAll() }
+                .controlSize(.small)
+                .disabled(model.isAnyRefreshing)
+        }
+        .padding(.top, 16)
+        .padding(.bottom, 4)
+    }
+
+    /// A main agent: the full ring, its name, and how long until the quota comes back.
+    private func mainTile(_ id: ProviderID) -> some View {
+        providerButton(id) {
+            VStack(spacing: 6) {
+                RingView(provider: id, state: model.state(id), status: model.status(id))
+                Text(id.displayName)
+                    .font(.system(size: 11, weight: .medium))
+                Text(resetLine(id))
+                    .font(.system(size: 9.5))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .multilineTextAlignment(.center)
+            .frame(width: 90)
+        }
+    }
+
+    /// A side provider: a smaller ring and its name. No countdown — you are not waiting on it.
+    private func sideTile(_ id: ProviderID) -> some View {
+        providerButton(id) {
+            VStack(spacing: 4) {
+                RingView(provider: id, state: model.state(id), status: model.status(id),
+                         diameter: 30, lineWidth: 2.5)
+                Text(id.displayName)
+                    .font(.system(size: 9.5))
+                    .foregroundStyle(.secondary)
+            }
+            .frame(width: 62)
+        }
+    }
+
+    private func providerButton<Content: View>(_ id: ProviderID, @ViewBuilder _ label: () -> Content) -> some View {
+        Button { onSelect(id) } label: {
+            label().contentShape(Rectangle())
+        }
+        .buttonStyle(LiftButtonStyle())
+        .focusable()
+        .focused($focusedProvider, equals: id)
+        .focusEffectDisabled()
+        .overlay {
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color.accentColor, lineWidth: 2)
+                .padding(-4)
+                .opacity(state.keyboardNavigation && state.focusedProvider == id ? 1 : 0)
+                .allowsHitTesting(false)
+        }
+        .accessibilityLabel(id.displayName)
+        .accessibilityValue(providerDescription(id))
+        .accessibilityHint("Open quota details for \(id.displayName)")
+    }
+
+    /// When the limiting quota comes back, or what is wrong instead. Never both, never jargon.
+    private func resetLine(_ id: ProviderID) -> String {
+        if model.status(id) == .expired { return "Signed out" }
+        if model.state(id)?.lastError != nil { return "Can't reach it" }
+        guard let window = model.state(id)?.snapshot?.limitingWindow else { return "" }
+        guard let resets = window.resetsAt else { return "" }
+        return resets > model.now ? "Back in \(Formatting.countdown(to: resets, from: model.now))" : "Resetting"
     }
 
     // MARK: - Detail
@@ -267,13 +293,11 @@ struct IslandView: View {
                     state: model.state(id),
                     status: model.status(id),
                     now: model.now,
-                    spend: model.spend[id],
                     model: model,
-                    onOpenTrends: { onOpenTrends(id) },
                     onBack: { onSelect(nil) }
                 )
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
-                    state.detailHeight = height + state.layout.anchor.notchHeight
+                    state.content.detailHeight = height + state.layout.anchor.notchHeight
                 }
             }
             .scrollBounceBehavior(.basedOnSize)
