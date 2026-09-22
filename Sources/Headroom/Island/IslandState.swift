@@ -19,8 +19,8 @@ final class IslandState {
         focusedProvider = providers[(index + delta + providers.count) % providers.count]
         keyboardNavigation = true
     }
-    /// Measured height of the detail content; drives the island size in `.detail`.
-    var detailHeight: CGFloat = 300
+    /// Everything about the island's size that comes from live content rather than the display.
+    var content = IslandContent()
 
     init(layout: IslandLayout) {
         self.layout = layout
@@ -28,6 +28,6 @@ final class IslandState {
 
     /// Body size of the island (excluding flares) for the current mode.
     var currentSize: CGSize {
-        layout.size(for: mode, detailHeight: detailHeight)
+        layout.size(for: mode, content: content)
     }
 }

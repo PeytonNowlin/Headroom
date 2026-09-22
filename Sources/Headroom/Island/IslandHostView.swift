@@ -73,6 +73,12 @@ final class IslandHostView: NSView {
         return shape.path(in: rect).contains(point)
     }
 
+    /// Hover uses the band, not the silhouette, so a dormant island — which has no silhouette
+    /// and lets clicks fall straight through — can still be summoned by moving to the notch.
+    private func hoverZoneContains(_ point: CGPoint) -> Bool {
+        IslandGeometry.hoverZone(layout: layout, size: currentSize()).contains(point)
+    }
+
     override func hitTest(_ point: NSPoint) -> NSView? {
         let local = convert(point, from: superview)
         guard islandContains(local) else { return nil }
@@ -105,7 +111,7 @@ final class IslandHostView: NSView {
     }
 
     private func updateHover(at point: CGPoint) {
-        let inside = islandContains(point)
+        let inside = hoverZoneContains(point)
         let provider = inside ? providerAtPoint(point) : nil
         if hoveredProvider != provider {
             hoveredProvider = provider

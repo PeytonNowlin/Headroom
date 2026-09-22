@@ -1,15 +1,13 @@
 import HeadroomCore
 import SwiftUI
 
-/// One provider’s quotas, connection actions, forecasts, and estimated token value.
+/// One provider’s quotas, connection actions, and forecasts.
 struct DetailView: View {
     let provider: ProviderID
     let state: ProviderState?
     let status: ConnectionStatus
     let now: Date
-    var spend: SpendSummary?
     var model: UsageModel
-    var onOpenTrends: () -> Void = {}
     let onBack: () -> Void
     @FocusState private var backFocused: Bool
 
@@ -36,36 +34,26 @@ struct DetailView: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     if let extra = snapshot.extraUsage {
-                        LabeledRow(title: "Provider-reported extra usage", value: Formatting.extraUsage(extra))
+                        LabeledRow(title: "Extra usage", value: Formatting.extraUsage(extra))
                     }
                     if let credits = snapshot.resetCredits {
-                        LabeledRow(title: "Rate Limit Resets", value: credits == 1 ? "1 available" : "\(credits) available")
+                        LabeledRow(title: "Early resets", value: credits == 1 ? "1 left" : "\(credits) left")
                     }
                 } else {
                     ProgressView().controlSize(.small)
                 }
             }
-            if model.preferences.alertOptions(provider).warningsEnabled,
-               snapshot?.windows.contains(where: { ($0.resetsAt.map { $0 > now } ?? false) }) == true {
-                Button(model.alertsSnoozed(provider) ? "Resume quota warnings" : "Snooze warnings until reset") {
+            // The one alert control anywhere: silence this provider until its quota comes back.
+            if snapshot?.windows.contains(where: { ($0.resetsAt.map { $0 > now } ?? false) }) == true {
+                Button(model.alertsSnoozed(provider) ? "Warn me again" : "Quiet until reset") {
                     toggleWarnings()
                 }
                 .font(.system(size: 11))
                 .buttonStyle(.plain)
                 .focusable()
                 .onKeyPress(keys: [.return, .space], phases: .down) { _ in toggleWarnings(); return .handled }
-                .accessibilityLabel(model.alertsSnoozed(provider) ? "Resume quota warnings" : "Snooze warnings until reset")
+                .accessibilityLabel(model.alertsSnoozed(provider) ? "Warn me again" : "Quiet until reset")
                 .foregroundStyle(.secondary)
-                .help("Each current quota window stays snoozed until its own reset. Quota-return alerts remain enabled if selected.")
-            }
-            if let spend {
-                SpendTiles(summary: spend)
-                    .padding(.top, 4)
-                Button("Usage trends…", action: onOpenTrends)
-                    .controlSize(.small)
-                    .focusable()
-                    .onKeyPress(keys: [.return, .space], phases: .down) { _ in onOpenTrends(); return .handled }
-                    .accessibilityLabel("Open usage trends")
             }
         }
         .padding(.horizontal, 18)
@@ -114,9 +102,9 @@ struct DetailView: View {
     private var refreshLine: String {
         var parts: [String] = []
         if state?.isRefreshing == true {
-            parts.append("refreshing")
+            parts.append("checking")
         } else if let next = state?.nextRefreshAt {
-            let label = state?.isRateLimited(at: now) == true ? "rate limited · retry in" : "next in"
+            let label = state?.isRateLimited(at: now) == true ? "waiting" : "next"
             parts.append("\(label) \(Formatting.clock(to: next, from: now))")
         }
         return parts.joined(separator: " · ")
@@ -155,22 +143,16 @@ struct WindowRow: View {
             Text(resetText)
                 .font(.system(size: 10.5))
                 .foregroundStyle(.secondary)
-            if let forecast {
-                Text(forecast.isVariable ? "Usage is bursty · forecast uncertain" : "Recent pace: \(Pace.hint(forecast.recent, now: now))")
-                    .font(.system(size: 10.5))
-                    .foregroundStyle(!forecast.isVariable && paceIsBad(forecast.recent) ? urgencyWarn : .secondary)
-                if let whole = forecast.wholeWindow {
-                    Text("Whole-window average: \(Pace.hint(whole, now: now))")
-                        .font(.system(size: 10))
-                        .foregroundStyle(.secondary)
-                }
-                Text("Based on ~\(Int(forecast.observationDuration / 60))m of observations; assumes this pace continues.")
-                    .font(.system(size: 9.5))
-                    .foregroundStyle(.secondary)
-            } else {
-                Text(window.remainingPercent == 0 ? "Quota exhausted · waiting for reset" : "Not enough recent data to forecast")
+            // One line of estimate at most. Bursty usage and thin data both say nothing rather
+            // than explain themselves.
+            if window.remainingPercent == 0 {
+                Text("Out until reset")
                     .font(.system(size: 10.5))
                     .foregroundStyle(.secondary)
+            } else if let forecast, !forecast.isVariable {
+                Text("At this rate · \(Pace.hint(forecast.recent, now: now))")
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(paceIsBad(forecast.recent) ? urgencyWarn : .secondary)
             }
         }
     }
@@ -183,9 +165,9 @@ struct WindowRow: View {
     }
 
     private var resetText: String {
-        guard window.isStarted else { return "Not started — begins with your first message" }
+        guard window.isStarted else { return "Starts with your first message" }
         guard let resets = window.resetsAt else { return "" }
-        return resets > now ? "Resets in \(Formatting.countdown(to: resets, from: now))" : "Reset time passed · awaiting provider confirmation"
+        return resets > now ? "Back in \(Formatting.countdown(to: resets, from: now))" : "Resetting"
     }
 }
 

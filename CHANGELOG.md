@@ -4,6 +4,26 @@ All notable changes to Headroom. The format follows [Keep a Changelog](https://k
 
 ## [Unreleased]
 
+### Added
+
+- Provider tiers. Each provider is **Main**, **Side**, or **Hidden** — one control that replaces the old visibility picker and the per-provider alert switches. Claude and Codex default to Main; Grok, Cursor, and OpenCode default to Side. Main agents are the ones whose quota stops your work, so only they can bring the island on screen.
+- A dormant island. While every main agent has room and none is broken, Headroom draws nothing at all: no band, no gauges, no glass. The notch band stays hoverable, so moving the cursor there (or pressing the hotkey) still summons it.
+- Compact gauges now carry each provider's glyph, and main gauges are drawn larger than side gauges, so two gauges beside the notch are never ambiguous. Main gauges sit left of the notch, side gauges right of it.
+- The band sizes itself to its gauges instead of clipping them, and the expanded island's height is measured from its content instead of being fixed.
+
+### Changed
+
+- Only providers with something to say get a compact gauge: past the first urgency step, or a login that stopped working. Everything else is silence.
+- The expanded island separates main agents (full rings, name, and when quota comes back) from side providers (smaller rings and a name).
+- Wording throughout the island drops implementation vocabulary — "limiting window", "provider-reported extra usage", "awaiting provider confirmation", "not enough recent data to forecast" — in favor of plain statements, or nothing when there is nothing useful to say.
+- Quota warnings are no longer configurable per provider. They fire near the edge of a window, and a provider's drill-in can quiet it until that quota comes back. macOS notifications remain one opt-in switch.
+- A provider you are not signed in to is never drawn; the old "Always show" visibility option is gone.
+
+### Removed
+
+- Estimated token value and Usage Trends, along with the local log scanning, SQLite reads, and public price lists that fed them. A number that needed three disclaimers to be honest is not a number you can act on, so the feature is gone rather than hedged. Quota, resets, and pace forecasting are unaffected.
+- The gauge colour legend in Settings. The gauges drain as quota is used, so the colour does not need explaining.
+
 ### Fixed
 
 - Guard integer parsing of provider JSON so a malformed or out-of-range value cannot crash a refresh.

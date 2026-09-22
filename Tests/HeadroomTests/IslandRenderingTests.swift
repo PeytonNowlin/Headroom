@@ -42,6 +42,9 @@ struct IslandRenderingTests {
         let model = UsageModel(environment: environment, preferences: preferences)
         let layout = IslandLayout.make(for: .simulatedNotch(height: 32))
         let state = IslandState(layout: layout)
+        state.content.mainGauges = model.compactMain.count
+        state.content.secondaryGauges = model.compactSecondary.count
+
         state.mode = .expanded
         try await capture(IslandView(state: state, model: model), size: layout.panel,
                           name: "expanded-saved", directory: directory)
@@ -50,29 +53,32 @@ struct IslandRenderingTests {
                           name: "compact", directory: directory)
         state.hoveredProvider = .codex
         try await capture(IslandView(state: state, model: model), size: layout.panel,
-                          name: "compact-led-hover", directory: directory)
+                          name: "compact-hover", directory: directory)
         state.hoveredProvider = nil
+
+        // Dormant: the whole point of the redesign is that this capture is empty.
+        state.mode = .dormant
+        #expect(state.currentSize.height == 0)
+        try await capture(IslandView(state: state, model: model), size: CGSize(width: layout.panel.width, height: 80),
+                          name: "dormant", directory: directory)
+
         try await capture(HStack(spacing: 20) {
             ForEach([0.0, 25, 50, 75, 95, 100], id: \.self) { used in
                 VStack {
-                    ProviderDot(state: ProviderState(provider: .claude, snapshot: Snapshot(provider: .claude, fetchedAt: now, status: .connected,
-                        windows: [QuotaWindow(id: "session", title: "Session", usedPercent: used, resetsAt: now.addingTimeInterval(3600), duration: 18000)])), status: .connected)
+                    CompactGauge(provider: .claude,
+                                 state: ProviderState(provider: .claude, snapshot: Snapshot(provider: .claude, fetchedAt: now, status: .connected,
+                                     windows: [QuotaWindow(id: "session", title: "Session", usedPercent: used, resetsAt: now.addingTimeInterval(3600), duration: 18000)])),
+                                 status: .connected)
                     Text("\(Int(100 - used))%").font(.caption)
                 }
             }
         }.padding(20).background(.black).environment(\.colorScheme, .dark), size: CGSize(width: 420, height: 90),
-                          name: "led-gauges", directory: directory)
+                          name: "compact-gauges", directory: directory)
+
         state.mode = .detail(.claude)
         try await capture(IslandView(state: state, model: model), size: layout.panel,
                           name: "detail-saved", directory: directory)
         #expect(state.currentSize.height <= IslandLayout.maxHeight - 110)
-
-        let partial = SpendTile(cost: 12.34, tokens: 500_000, calls: 100, hasData: true, unpricedTokens: 12_000)
-        let summary = SpendSummary(today: partial, yesterday: .empty, last30Days: partial, dailyCost: [], computedAt: now)
-        try await capture(VStack(spacing: 24) {
-            SpendTiles(summary: summary)
-            SpendFooter(summary: summary)
-        }.padding(20), size: CGSize(width: 440, height: 260), name: "partial-token-value", directory: directory)
 
         try await capture(VStack(alignment: .leading, spacing: 18) {
             ConnectionView(provider: .claude, state: ProviderState(provider: .claude), now: now) {}
@@ -81,16 +87,11 @@ struct IslandRenderingTests {
             ConnectionView(provider: .cursor, state: ProviderState(provider: .cursor, lastError: "Rate limited", rateLimitedUntil: now.addingTimeInterval(240)), now: now) {}
         }.padding(20), size: CGSize(width: 440, height: 380), name: "connection-recovery", directory: directory)
 
-        try await capture(SettingsView(model: model, preferences: preferences), size: CGSize(width: 520, height: 720),
+        try await capture(SettingsView(model: model, preferences: preferences), size: CGSize(width: 520, height: 620),
                           name: "settings", directory: directory)
-        try await capture(SettingsView(model: model, preferences: preferences), size: CGSize(width: 520, height: 1600),
+        try await capture(SettingsView(model: model, preferences: preferences), size: CGSize(width: 520, height: 1200),
                           name: "settings-full", directory: directory)
-        try await capture(TrendsView(model: model), size: CGSize(width: 680, height: 680),
-                          name: "trends-empty", directory: directory)
-        let trendModel = UsageModel(environment: SpendModelFixture().environment, preferences: preferences)
-        await trendModel.rescanSpend(force: true)
-        try await capture(TrendsView(model: trendModel), size: CGSize(width: 680, height: 760),
-                          name: "trends-populated", directory: directory)
+
         let quota = windows[0]
         var history = UsageHistory()
         for (ago, used) in [(600.0, 66.0), (300.0, 71.0), (0.0, 76.0)] {

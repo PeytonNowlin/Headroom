@@ -9,7 +9,6 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     private let model: UsageModel
     private let updater: UpdateController?
     private let notifications: NotificationController?
-    var onOpenTrends: () -> Void = {}
 
     init(model: UsageModel, updater: UpdateController? = nil, notifications: NotificationController? = nil) {
         self.model = model
@@ -20,7 +19,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     func show() {
         if window == nil {
             let view = SettingsView(model: model, preferences: model.preferences, updater: updater,
-                                    notifications: notifications, onOpenTrends: { [weak self] in self?.onOpenTrends() })
+                                    notifications: notifications)
             let hosting = NSHostingController(rootView: view)
             let window = NSWindow(contentViewController: hosting)
             window.title = "Headroom Settings"
@@ -30,7 +29,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
             window.isMovableByWindowBackground = true
             window.isReleasedWhenClosed = false
             window.delegate = self
-            window.setContentSize(NSSize(width: 520, height: 720))
+            window.setContentSize(NSSize(width: 520, height: 620))
             window.center()
             self.window = window
         }

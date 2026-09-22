@@ -111,30 +111,40 @@ struct RingView: View {
     }
 }
 
-/// Remaining quota in a tiny ring, with a single pulse after confirmed recovery.
-struct ProviderDot: View {
+/// One provider in the compact band: a draining ring in urgency colour with the provider's
+/// glyph inside it, so two gauges side by side are never ambiguous. Main gauges are drawn
+/// larger than side gauges — the size is the tier.
+struct CompactGauge: View {
+    let provider: ProviderID
     let state: ProviderState?
     let status: ConnectionStatus
-    @Environment(\.colorScheme) private var scheme
-
+    var size: CGFloat = CompactMetrics.mainSize
     var resetAt: Date? = nil
+
+    @Environment(\.colorScheme) private var scheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private var hasProblem: Bool { status == .expired || state?.lastError != nil }
 
     var body: some View {
         let color = Self.color(state: state, status: status, scheme: scheme) ?? .clear
         let remaining = min(1, max(0, (state?.snapshot?.ringRemainingPercent ?? 0) / 100))
         ZStack {
-            Circle().strokeBorder(color.opacity(0.28), lineWidth: 1.5)
-            if status == .expired || state?.lastError != nil {
-                Text("!").font(.system(size: 7, weight: .heavy)).foregroundStyle(color)
+            Circle().strokeBorder(color.opacity(0.25), lineWidth: max(1.2, size * 0.1))
+            if hasProblem {
+                Text("!")
+                    .font(.system(size: size * 0.6, weight: .heavy))
+                    .foregroundStyle(color)
             } else {
                 Circle().trim(from: 0, to: remaining)
-                    .stroke(color, style: StrokeStyle(lineWidth: 1.8, lineCap: .round))
+                    .stroke(color, style: StrokeStyle(lineWidth: max(1.4, size * 0.12), lineCap: .round))
                     .rotationEffect(.degrees(-90))
-                    .padding(0.9)
+                    .padding(size * 0.06)
+                ProviderGlyph(provider: provider, size: size * 0.44)
+                    .foregroundStyle(.white.opacity(0.9))
             }
         }
-        .frame(width: 9, height: 9)
+        .frame(width: size, height: size)
         .phaseAnimator([false, true, false], trigger: resetAt) { content, active in
             content.scaleEffect(active && !reduceMotion ? 1.3 : 1)
                 .brightness(active && !reduceMotion ? 0.2 : 0)
@@ -143,8 +153,8 @@ struct ProviderDot: View {
         .opacity(status == .stale ? 0.6 : 1)
     }
 
-    /// Nil means "no dot": there is no quota to summarize (e.g. a Grok Business login, which
-    /// publishes no personal limits) or no credentials at all.
+    /// Nil means "nothing to gauge": there is no quota to summarize (e.g. a Grok Business
+    /// login, which publishes no personal limits) or no credentials at all.
     static func color(state: ProviderState?, status: ConnectionStatus, scheme: ColorScheme) -> Color? {
         switch status {
         case .expired:

@@ -24,19 +24,11 @@ struct FormattingTests {
         #expect(Formatting.clock(to: now.addingTimeInterval(4000), from: now) == "1h 6m")
     }
 
-    @Test("dollars and tokens read like the spec examples")
+    @Test("dollars read like the spec examples")
     func money() {
         #expect(Formatting.dollars(4.08) == "$4.08")
         #expect(Formatting.dollars(0.5) == "$0.50")
         #expect(Formatting.dollars(1234) == "$1,234.00")
-        #expect(Formatting.tokens(1_200_000) == "1.2M")
-        #expect(Formatting.tokens(845_000) == "845K")
-        #expect(Formatting.tokens(312) == "312")
-        #expect(Formatting.tokens(2_000_000) == "2M")
-        #expect(Formatting.tokens(999_949_999) == "999.9M")
-        #expect(Formatting.tokens(1_024_000_000) == "1B")
-        #expect(Formatting.tokens(1_250_000_000) == "1.3B")
-        #expect(Formatting.tokens(12_700_000_000) == "12.7B")
     }
 
     @Test("extra usage row covers disabled, capped, uncapped, and labelled")

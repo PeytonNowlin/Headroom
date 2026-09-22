@@ -33,26 +33,6 @@ public enum Formatting {
         return f.string(from: NSNumber(value: amount)) ?? "$\(amount)"
     }
 
-    /// `1.2B`, `845M`, `1.2M`, `845K`, `312`.
-    public static func tokens(_ count: Int) -> String {
-        switch count {
-        case 1_000_000_000...:
-            return trim(Double(count) / 1_000_000_000) + "B"
-        case 1_000_000...:
-            return trim(Double(count) / 1_000_000) + "M"
-        case 1_000...:
-            return trim(Double(count) / 1_000) + "K"
-        default:
-            return String(count)
-        }
-    }
-
-    private static func trim(_ value: Double) -> String {
-        let rounded = (value * 10).rounded() / 10
-        if rounded == rounded.rounded() { return String(Int(rounded)) }
-        return String(format: "%.1f", rounded)
-    }
-
     /// Extra-usage row text.
     public static func extraUsage(_ extra: ExtraUsage) -> String {
         if let label = extra.label { return label }

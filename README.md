@@ -4,12 +4,17 @@
 
 # Headroom
 
-A quota island for your MacBook notch. Headroom shows how much headroom you have left on Claude, Codex, Grok, Cursor, and OpenCode Go — as tiny dots beside the notch, as draining rings when you hover, and as full quota windows, reset countdowns, and local spend when you click in.
+A quota island for your MacBook notch. Headroom tells you when you are running out of room on Claude, Codex, Grok, Cursor, or OpenCode Go — and stays completely invisible until you are.
 
-- **Compact**: a tiny remaining-quota gauge per provider, colored by urgency (green → yellow → orange → red). Hover a gauge for quota/reset context; click it to open that provider.
-- **Hover**: rings per provider showing percent remaining, the limiting window, its reset countdown, and when usage was last checked. The footer shows estimated token value and tokens for today / yesterday / 30 days.
-- **Click a ring**: every quota window with its reset time and recent versus whole-window pace, provider-reported extra usage, Codex reset credits, and estimated token value. Retry a connection or snooze warnings here.
-- **Alerts**: one combined banner per window for 80% / 95% usage and confident recent-pace warnings. Settings offers per-provider warnings, snooze until each current window resets, and opt-in banners when a confirmed reset restores quota after 80%+ usage.
+- **Nothing, most of the time**: while every main agent has room and none is broken, Headroom draws nothing at all. Move the cursor to the notch, or press the hotkey, to summon it anyway.
+- **Compact**: once a main agent is near its limit, a draining gauge appears for each provider that has something to say, carrying that provider's glyph. Main agents sit left of the notch at full size, side providers right of it and smaller. Hover a gauge for context; click it to open that provider.
+- **Hover**: rings per provider — main agents with their name and when quota comes back, side providers smaller and quieter.
+- **Click a ring**: every quota window with percent left, when it resets, an at-this-rate estimate when the data supports one, extra usage, and Codex early resets. Retry a connection, or quiet the provider until its quota returns.
+- **Alerts**: one combined banner per window near the edge of a quota window, plus confident pace warnings. Settings has a single switch for macOS notifications.
+
+### Main and side providers
+
+Each provider is **Main**, **Side**, or **Hidden** in Settings. Main agents — Claude and Codex by default — are the ones whose quota stops your work, and only they can bring the island on screen. Side providers (Grok, Cursor, OpenCode by default) still get their own gauge and ring, and still show up beside the notch once the island is up, but a research provider running dry never interrupts you.
 
 Headroom reads the same credentials your CLIs already use and the same session logs they already write. It never writes to them, never phones home, and has no telemetry.
 
@@ -32,27 +37,25 @@ If macOS says the app is "damaged", clear the quarantine flag instead: `xattr -d
 
 | Action | Result |
 | --- | --- |
-| Hover a compact gauge | Show provider quota, reset, and freshness |
+| Hover the notch | Expand to rings, even while the island is drawing nothing |
+| Hover a compact gauge | Show that provider's quota and reset |
 | Click a compact gauge | Open that provider directly |
-| Hover the rest of the notch | Expand to rings |
 | Click a ring | Drill into that provider |
-| Right-click | Refresh, pin open, trends, updates, settings, quit |
+| Right-click the island | Refresh, pin open, updates, settings, quit |
 | `⌃⌥U` (customizable) | Open and focus the island; press again to close |
 | Arrow keys / Return | Select a provider / open its details |
 | Tab / Shift-Tab / Escape | Traverse controls / close and restore the previous app |
 | Click empty island while pinned | Unpin |
 
+A dormant island has no silhouette, so clicks pass straight through to whatever is beneath it. Hover it first (or use the hotkey) to get the island, and its menu, back.
+
 Providers refresh every 5 minutes; the countdown in the island's corner shows when. Refresh Now is in the right-click menu. If a provider rate-limits us, Headroom waits out the cooldown rather than retrying.
 
 Settings includes provider-specific sign-in guidance and **Check again** actions. Missing logins, expired credentials, failed refreshes, rate-limit cooldowns, and saved usage have distinct status messages.
 
-Forecasts use up to an hour of local quota observations. They require at least three samples spanning ten minutes, restart after gaps or quota corrections, and suppress pace warnings when usage is bursty. They are estimates assuming the observed pace continues. Saved or failing data does not produce a forecast.
-
-**Estimated token value is not your subscription bill.** Values use model token prices or recorded costs. An asterisk marks a partial estimate with unknown model prices; provider-reported extra usage is shown separately.
+Forecasts use up to an hour of local quota observations. They require at least three samples spanning ten minutes, restart after gaps or quota corrections, and say nothing at all when usage is bursty or the data is thin. They are estimates assuming the observed pace continues.
 
 Compact gauges drain with remaining quota, so color is not the only signal. An empty ring means no remaining headroom; `!` indicates a connection problem. A single soft pulse marks a confirmed reset that restores headroom, independent of notification settings. Saved data and elapsed countdowns do not trigger it. Reduce Motion disables the pulse.
-
-Open **Usage Trends** from the menu, the estimated-value footer, or provider details to compare seven or thirty calendar days and see value by model. Missing records remain gaps; unknown prices are excluded from dollar totals and disclosed.
 
 Enable **macOS notifications** in Settings to request permission for quota alerts. Notifications offer **Open Provider** and **Snooze Until Reset**; the island banners continue to work without notification permission.
 
@@ -61,7 +64,7 @@ Use **Check for Updates** in the menu or Settings. Automatic checks are optional
 ## Privacy
 
 - Credentials are read from where the CLIs keep them (Keychain for Claude, `~/.codex/auth.json`, `~/.grok/auth.json`, the `opencode-go` key in `~/.local/share/opencode/auth.json`, Cursor's state database opened read-only) and are only ever used to call each vendor's own usage endpoint. Headroom never writes credentials and never refreshes tokens.
-- Spend is computed locally from session logs (`~/.claude/projects`, `~/.codex/sessions`, `~/.grok/sessions`). Cursor has no local log, so its last 30 days are fetched from your own Cursor dashboard export and priced locally. OpenCode records what each message cost, so its tiles are read (never written) from `~/.local/share/opencode/opencode*.db` with `sqlite3 -readonly` and use those recorded dollars. Public model pricing is fetched hourly (LiteLLM, models.dev, and OpenUsage's supplement). Update checks contact GitHub for the signed feed and release downloads; Sparkle system-profile reporting is disabled.
+- Headroom no longer reads your session logs at all. Estimated token value and Usage Trends are gone, and with them the log scanning, the SQLite reads, and the public price lists they needed. Update checks contact GitHub for the signed feed and release downloads; Sparkle system-profile reporting is disabled.
 - Quota history stores only timestamps and percentages in Headroom’s own Application Support directory, bounded to the most recent hour of observations per current window. No prompts or credentials are included.
 - No analytics, no crash reporting, no accounts.
 
@@ -85,6 +88,6 @@ Releases are cut with `script/release.sh vX.Y.Z`, which runs the tests, builds a
 
 ## Credits
 
-Provider adapters and spend parsing are ported from [openusage](https://github.com/robinebers/openusage); the Liquid Glass island is inspired by [tokenly](https://github.com/itsSwanks/tokenly). See `NOTICE`.
+Provider adapters are ported from [openusage](https://github.com/robinebers/openusage); the Liquid Glass island is inspired by [tokenly](https://github.com/itsSwanks/tokenly). See `NOTICE`.
 
 MIT licensed.

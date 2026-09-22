@@ -16,7 +16,6 @@ final class IslandController {
     private var outsideClickMonitor: Any?
 
     var onOpenSettings: () -> Void = {}
-    var onOpenTrends: (ProviderID?) -> Void = { _ in }
     var onCheckForUpdates: () -> Void = {}
     private var previousApplication: NSRunningApplication?
 
@@ -51,6 +50,31 @@ final class IslandController {
         KeyboardShortcuts.onKeyUp(for: .toggleIsland) { [weak self] in
             self?.toggleKeyboardNavigation()
         }
+
+        observeDormancy()
+    }
+
+    /// The state a resting island returns to: nothing at all while no main agent is near its
+    /// limit, otherwise the band of gauges.
+    private var restingMode: IslandMode {
+        model.isDormant ? .dormant : .compact
+    }
+
+    /// Dormancy is data-driven, not interaction-driven, so it is pushed in from here whenever the
+    /// model changes. Islands the user is currently looking at keep their mode.
+    private func observeDormancy() {
+        withObservationTracking {
+            let resting = restingMode
+            let main = model.compactMain.count
+            let secondary = model.compactSecondary.count
+            for instance in instances.values {
+                instance.state.content.mainGauges = main
+                instance.state.content.secondaryGauges = secondary
+                if instance.state.mode.isCompact { instance.setMode(resting) }
+            }
+        } onChange: {
+            Task { @MainActor [weak self] in self?.observeDormancy() }
+        }
     }
 
     // MARK: - Displays
@@ -82,14 +106,14 @@ final class IslandController {
         let root = IslandView(
             state: state, model: model,
             onSelect: { [weak self] provider in self?.select(provider, on: id) },
-            onOpenSettings: { [weak self] in self?.onOpenSettings() },
-            onOpenTrends: { [weak self] provider in self?.onOpenTrends(provider) }
+            onOpenSettings: { [weak self] in self?.onOpenSettings() }
         )
         let host = IslandHostView(layout: layout, rootView: root)
         host.currentSize = { [state] in state.currentSize }
         host.providerAtPoint = { [weak model, state] point in
-            guard state.mode.isCompact, let model else { return nil }
-            return IslandGeometry.compactProvider(at: point, layout: state.layout, providers: model.dotProviders)
+            guard state.mode == .compact, let model else { return nil }
+            return IslandGeometry.compactProvider(at: point, layout: state.layout,
+                                                  main: model.compactMain, secondary: model.compactSecondary)
         }
         host.onProviderHover = { [weak self, state] provider in
             state.hoveredProvider = provider
@@ -108,7 +132,7 @@ final class IslandController {
         let instance = IslandInstance(displayID: id, state: state, panel: panel, host: host)
         instance.onVisibilityChange = { [weak self] in self?.updateClockVisibility() }
         instance.setHidden(hiddenDisplays.contains(id))
-        if pinned { instance.setMode(.expanded) }
+        instance.setMode(pinned ? .expanded : restingMode)
         return instance
     }
 
@@ -172,7 +196,7 @@ final class IslandController {
             instance.state.pinned = false
             instance.state.keyboardNavigation = false
             instance.panel.resignKey()
-            instance.setMode(.compact)
+            instance.setMode(restingMode)
         }
         stopOutsideClickMonitor()
         previousApplication?.activate()
@@ -186,7 +210,7 @@ final class IslandController {
         instance.hovering = hovering
         instance.dwellTask?.cancel()
         if hovering {
-            guard instance.state.mode == .compact, instance.state.hoveredProvider == nil else { return }
+            guard instance.state.mode.isCompact, instance.state.hoveredProvider == nil else { return }
             instance.dwellTask = Task { [weak instance] in
                 try? await Task.sleep(for: Motion.hoverDwell)
                 guard !Task.isCancelled, let instance, instance.state.mode.isCompact, instance.state.hoveredProvider == nil else { return }
@@ -198,7 +222,7 @@ final class IslandController {
             instance.dwellTask = Task { [weak self, weak instance] in
                 try? await Task.sleep(for: Motion.collapseGrace)
                 guard !Task.isCancelled, let self, let instance, !instance.hovering, !self.pinned else { return }
-                instance.setMode(.compact)
+                instance.setMode(self.restingMode)
             }
         }
     }
@@ -219,9 +243,9 @@ final class IslandController {
         for instance in instances.values {
             instance.state.pinned = pinned
             if pinned {
-                if instance.state.mode == .compact { instance.setMode(.expanded) }
+                if instance.state.mode.isCompact { instance.setMode(.expanded) }
             } else if !instance.hovering {
-                instance.setMode(.compact)
+                instance.setMode(restingMode)
             }
         }
         if pinned {
@@ -261,7 +285,7 @@ final class IslandController {
             try? await Task.sleep(for: .seconds(10))
             guard let self, !self.pinned else { return }
             for instance in self.instances.values where !instance.hovering {
-                instance.setMode(.compact)
+                instance.setMode(self.restingMode)
             }
         }
     }
@@ -285,9 +309,6 @@ final class IslandController {
         menu.addItem(pin)
 
         menu.addItem(.separator())
-        let trends = NSMenuItem(title: "Usage Trends…", action: #selector(openTrends), keyEquivalent: "t")
-        trends.target = self
-        menu.addItem(trends)
         let updates = NSMenuItem(title: "Check for Updates…", action: #selector(checkForUpdates), keyEquivalent: "")
         updates.target = self
         menu.addItem(updates)
@@ -310,7 +331,6 @@ final class IslandController {
 
     @objc private func refreshNow() { model.refreshAll() }
     @objc private func pinFromMenu() { togglePinned() }
-    @objc private func openTrends() { onOpenTrends(nil) }
     @objc private func checkForUpdates() { onCheckForUpdates() }
     @objc private func openSettings() { onOpenSettings() }
 }

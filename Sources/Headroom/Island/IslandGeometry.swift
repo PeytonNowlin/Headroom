@@ -15,7 +15,7 @@ enum IslandAnchor: Equatable {
         return 0
     }
 
-    /// Horizontal gap between the two groups of compact dots.
+    /// Horizontal gap between the main gauges and the side gauges.
     var compactGap: CGFloat {
         switch self {
         case let .notch(width, _): width
@@ -25,16 +25,44 @@ enum IslandAnchor: Equatable {
 }
 
 enum IslandMode: Equatable {
+    /// Nothing to say: no silhouette, no glass, no pixels. Hovering the notch still summons it.
+    case dormant
     case compact
     case expanded
     case detail(ProviderID)
 
-    var isCompact: Bool { self == .compact }
+    /// Either collapsed band state. Both expand on hover and neither takes keyboard focus.
+    var isCompact: Bool { self == .compact || self == .dormant }
 
     var detailProvider: ProviderID? {
         if case let .detail(id) = self { return id }
         return nil
     }
+}
+
+/// The compact band's gauge metrics, in one place so the view and the hit-testing cannot drift.
+/// Main gauges sit left of the notch at full size; side gauges sit right of it, smaller.
+enum CompactMetrics {
+    static let mainSize: CGFloat = 16
+    static let secondarySize: CGFloat = 13
+    static let spacing: CGFloat = 5
+    /// Clearance between the notch edge and the nearest gauge.
+    static let notchInset: CGFloat = 8
+    /// Clearance between the outermost gauge and the end of the band.
+    static let outerInset: CGFloat = 10
+
+    static func groupWidth(count: Int, size: CGFloat) -> CGFloat {
+        count <= 0 ? 0 : CGFloat(count) * size + CGFloat(count - 1) * spacing
+    }
+}
+
+/// The runtime inputs to the island's size: how many gauges each side of the notch carries, and
+/// the measured heights of the expanded and detail content.
+struct IslandContent: Equatable {
+    var mainGauges = 0
+    var secondaryGauges = 0
+    var expandedHeight: CGFloat = 250
+    var detailHeight: CGFloat = 300
 }
 
 /// Fixed dimensions of the island, derived from the anchor. Detail height is content-driven
@@ -43,7 +71,6 @@ struct IslandLayout: Equatable {
     var anchor: IslandAnchor
     var compact: CGSize
     var expandedWidth: CGFloat
-    var expandedHeight: CGFloat
     /// Horizontal distance the top corners flare outward to meet the bezel.
     var flare: CGFloat
     var cornerRadius: CGFloat
@@ -54,12 +81,28 @@ struct IslandLayout: Equatable {
     /// Total panel size: the union of every mode.
     var panel: CGSize { CGSize(width: expandedWidth + flare * 2, height: Self.maxHeight) }
 
-    func size(for mode: IslandMode, detailHeight: CGFloat) -> CGSize {
-        switch mode {
-        case .compact: compact
-        case .expanded: CGSize(width: expandedWidth, height: expandedHeight)
-        case .detail: CGSize(width: expandedWidth, height: min(detailHeight, Self.maxHeight - 110))
+    /// Every size is content-driven: the band grows to hold its gauges rather than clipping
+    /// them, and an island with no side providers is not padded out for a row that isn't there.
+    func size(for mode: IslandMode, content: IslandContent) -> CGSize {
+        let ceiling = Self.maxHeight - 110
+        return switch mode {
+        // Zero height, not a hidden or masked island: the glass layer stays in the hierarchy
+        // untouched (see IslandView) and simply has nothing to draw.
+        case .dormant: CGSize(width: compact.width, height: 0)
+        case .compact: compactSize(main: content.mainGauges, secondary: content.secondaryGauges)
+        case .expanded: CGSize(width: expandedWidth, height: min(max(content.expandedHeight, 120), ceiling))
+        case .detail: CGSize(width: expandedWidth, height: min(content.detailHeight, ceiling))
         }
+    }
+
+    /// The band, symmetric about the notch and wide enough for whichever side carries more.
+    /// Never narrower than the base band, so a single gauge still reads as part of the bezel.
+    func compactSize(main: Int, secondary: Int) -> CGSize {
+        let widest = max(CompactMetrics.groupWidth(count: main, size: CompactMetrics.mainSize),
+                         CompactMetrics.groupWidth(count: secondary, size: CompactMetrics.secondarySize))
+        let half = max((compact.width - anchor.compactGap) / 2,
+                       widest + CompactMetrics.notchInset + CompactMetrics.outerInset)
+        return CGSize(width: anchor.compactGap + half * 2, height: compact.height)
     }
 
     static func make(for anchor: IslandAnchor) -> IslandLayout {
@@ -69,7 +112,6 @@ struct IslandLayout: Equatable {
                 anchor: anchor,
                 compact: CGSize(width: width + 2 * 46, height: height),
                 expandedWidth: max(440, width + 2 * 46),
-                expandedHeight: 304,
                 flare: 12,
                 cornerRadius: 14
             )
@@ -78,7 +120,6 @@ struct IslandLayout: Equatable {
                 anchor: anchor,
                 compact: CGSize(width: anchor.compactGap + 2 * 46, height: height),
                 expandedWidth: 440,
-                expandedHeight: 304 - 33,
                 flare: 12,
                 cornerRadius: 14
             )
@@ -87,18 +128,25 @@ struct IslandLayout: Equatable {
 }
 
 enum IslandGeometry {
-    /// Matches the compact HStacks: two groups around the notch, 14-point targets and 4-point gaps.
-    static func compactProvider(at point: CGPoint, layout: IslandLayout, providers: [ProviderID]) -> ProviderID? {
-        let split = (providers.count + 1) / 2
-        for (index, provider) in providers.enumerated() {
-            let x: CGFloat
-            if index < split {
-                x = layout.panel.width / 2 - layout.anchor.compactGap / 2 - CGFloat(split - index) * 18 + 4
-            } else {
-                x = layout.panel.width / 2 + layout.anchor.compactGap / 2 + CGFloat(index - split) * 18
-            }
-            let rect = CGRect(x: x, y: (layout.compact.height - 14) / 2, width: 14, height: 14)
+    /// Mirrors the compact HStacks: main gauges packed right-to-left against the notch's left
+    /// edge, side gauges left-to-right against its right edge.
+    static func compactProvider(at point: CGPoint, layout: IslandLayout,
+                                main: [ProviderID], secondary: [ProviderID]) -> ProviderID? {
+        let height = layout.compact.height
+        let center = layout.panel.width / 2
+        var x = center - layout.anchor.compactGap / 2 - CompactMetrics.notchInset
+        for provider in main.reversed() {
+            let size = CompactMetrics.mainSize
+            let rect = CGRect(x: x - size, y: (height - size) / 2, width: size, height: size)
             if rect.contains(point) { return provider }
+            x -= size + CompactMetrics.spacing
+        }
+        x = center + layout.anchor.compactGap / 2 + CompactMetrics.notchInset
+        for provider in secondary {
+            let size = CompactMetrics.secondarySize
+            let rect = CGRect(x: x, y: (height - size) / 2, width: size, height: size)
+            if rect.contains(point) { return provider }
+            x += size + CompactMetrics.spacing
         }
         return nil
     }
@@ -130,5 +178,13 @@ enum IslandGeometry {
         let panel = layout.panel
         let width = size.width + layout.flare * 2
         return CGRect(x: (panel.width - width) / 2, y: 0, width: width, height: size.height)
+    }
+
+    /// Where the cursor counts as "at the island". A dormant island has no silhouette to hover,
+    /// so the notch band always answers — that is how you summon it when it is drawing nothing.
+    static func hoverZone(layout: IslandLayout, size: CGSize) -> CGRect {
+        let band = CGRect(x: (layout.panel.width - layout.compact.width) / 2, y: 0,
+                          width: layout.compact.width, height: layout.compact.height)
+        return band.union(islandRect(layout: layout, size: size))
     }
 }

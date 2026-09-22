@@ -9,8 +9,6 @@ final class TestWorld: Sendable {
         var files: [String: Data] = [:]
         var keychain: [String: Data] = [:]
         var stateDatabases: [String: [String: String]] = [:]
-        var queryResults: [String: String] = [:]
-        var queries: [(path: String, sql: String)] = []
         var env: [String: String] = [:]
         var responses: [String: [HTTPResponse]] = [:]
         var fallbackResponse: HTTPResponse?
@@ -65,16 +63,6 @@ final class TestWorld: Sendable {
         let path = home.appending(path: database).path(percentEncoded: false)
         state.withLock { $0.stateDatabases[path, default: [:]][key] = value }
     }
-
-    /// A SQLite database (path relative to home) that answers every query with `result`. The file
-    /// itself is registered too, so directory listings and existence checks see it.
-    func database(_ relativeToHome: String, result: String) {
-        file(relativeToHome, "sqlite")
-        let path = home.appending(path: relativeToHome).path(percentEncoded: false)
-        state.withLock { $0.queryResults[path] = result }
-    }
-
-    var queries: [(path: String, sql: String)] { state.withLock { $0.queries } }
 
     /// Queue a response for a URL; responses are consumed in order, the last one repeating.
     func respond(_ url: String, _ response: HTTPResponse) {
@@ -151,26 +139,6 @@ final class TestWorld: Sendable {
                 }
                 await Task.yield()
             },
-            enumerateFiles: { directory, ext in
-                let prefix = directory.path(percentEncoded: false) + "/"
-                return world.state.withLock { s in
-                    s.files.keys.filter { $0.hasPrefix(prefix) && $0.hasSuffix("." + ext) }
-                        .sorted().map { URL(filePath: $0) }
-                }
-            },
-            fileInfo: { url in
-                let path = url.path(percentEncoded: false)
-                return world.state.withLock { s in
-                    s.files[path].map { FileInfo(size: $0.count, modified: s.now) }
-                }
-            },
-            readFileRange: { url, offset in
-                let path = url.path(percentEncoded: false)
-                guard let data = world.state.withLock({ $0.files[path] }) else {
-                    throw CocoaError(.fileReadNoSuchFile)
-                }
-                return offset >= data.count ? Data() : data.subdata(in: offset..<data.count)
-            },
             writeFile: { url, data in
                 world.state.withLock { $0.files[url.path(percentEncoded: false)] = data }
             },
@@ -185,13 +153,6 @@ final class TestWorld: Sendable {
                         guard path.hasPrefix(prefix) else { return nil }
                         return path.dropFirst(prefix.count).split(separator: "/").first.map(String.init)
                     }).sorted()
-                }
-            },
-            databaseQuery: { database, sql in
-                let path = database.path(percentEncoded: false)
-                return world.state.withLock { s in
-                    s.queries.append((path, sql))
-                    return s.queryResults[path]
                 }
             }
         )
