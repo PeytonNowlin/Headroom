@@ -4,6 +4,8 @@ All notable changes to Headroom. The format follows [Keep a Changelog](https://k
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-09-22
+
 ### Added
 
 - Provider tiers. Each provider is **Main**, **Side**, or **Hidden** — one control that replaces the old visibility picker and the per-provider alert switches. Claude and Codex default to Main; Grok, Cursor, and OpenCode default to Side. Main agents are the ones whose quota stops your work, so only they can bring the island on screen.
