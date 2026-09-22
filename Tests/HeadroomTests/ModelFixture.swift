@@ -6,7 +6,7 @@ import HeadroomCore
 /// started — enough to exercise everything that decides what the island shows.
 @MainActor
 enum ModelFixture {
-    static let now = Date(timeIntervalSince1970: 1_800_000_000)
+    nonisolated static let now = Date(timeIntervalSince1970: 1_800_000_000)
 
     static func snapshot(_ provider: ProviderID, used: Double, status: ConnectionStatus = .connected) -> Snapshot {
         Snapshot(provider: provider, fetchedAt: now, status: status, planName: "Pro",
