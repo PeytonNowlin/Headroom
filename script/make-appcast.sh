@@ -1,5 +1,6 @@
 #!/bin/zsh
-# Generate signed update metadata without publishing. The private key stays in Keychain.
+# Generate signed update metadata without publishing. The private key is read from
+# Keychain, or from SPARKLE_ED_KEY when set (the CI release workflow).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 VERSION="${1:?usage: script/make-appcast.sh X.Y.Z}"
@@ -10,11 +11,20 @@ cp "build/Headroom-$VERSION.dmg" "$ARCHIVES/"
 if [[ -f "build/Headroom-$VERSION-notes.md" ]]; then
   cp "build/Headroom-$VERSION-notes.md" "$ARCHIVES/Headroom-$VERSION.md"
 fi
-.build/artifacts/sparkle/Sparkle/bin/generate_appcast \
-  --account io.github.peytonnowlin.Headroom \
+
+sparkle() {
+  local tool=".build/artifacts/sparkle/Sparkle/bin/$1"; shift
+  if [[ -n "${SPARKLE_ED_KEY:-}" ]]; then
+    print -r -- "$SPARKLE_ED_KEY" | "$tool" --ed-key-file - "$@"
+  else
+    "$tool" --account io.github.peytonnowlin.Headroom "$@"
+  fi
+}
+
+sparkle generate_appcast \
   --download-url-prefix "https://github.com/PeytonNowlin/Headroom/releases/download/v$VERSION/" \
   --link "https://github.com/PeytonNowlin/Headroom/releases/tag/v$VERSION" \
   --maximum-deltas 0 --embed-release-notes \
   -o "$ARCHIVES/appcast.xml" "$ARCHIVES"
-.build/artifacts/sparkle/Sparkle/bin/sign_update --account io.github.peytonnowlin.Headroom --verify "$ARCHIVES/appcast.xml"
+sparkle sign_update --verify "$ARCHIVES/appcast.xml"
 cp "$ARCHIVES/appcast.xml" build/appcast.xml

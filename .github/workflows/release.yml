@@ -1,0 +1,38 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release, e.g. 0.6.0 (needs a matching CHANGELOG.md section)"
+        required: true
+
+permissions:
+  contents: write
+
+concurrency: release
+
+jobs:
+  release:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # CFBundleVersion is the commit count, so the full history is required.
+          fetch-depth: 0
+
+      - name: Show toolchain
+        run: |
+          xcode-select -p
+          swift --version
+
+      - name: Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SPARKLE_ED_KEY: ${{ secrets.SPARKLE_ED_KEY }}
+          VERSION_INPUT: ${{ inputs.version }}
+        run: |
+          [ -n "$SPARKLE_ED_KEY" ] || { echo "SPARKLE_ED_KEY secret is not set" >&2; exit 1; }
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          script/release.sh "v${VERSION_INPUT#v}"

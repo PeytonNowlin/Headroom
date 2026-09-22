@@ -84,7 +84,7 @@ HEADROOM_UI_ARTIFACTS="$PWD/.build/ui-checks" swift test --filter IslandRenderin
 
 These captures check native text and layout; AppKit's view capture does not reproduce the desktop glass backdrop. Verify glass appearance and VoiceOver navigation in the running app; the SwiftPM test host does not expose the full accessibility tree.
 
-Releases are cut with `script/release.sh vX.Y.Z`, which runs the tests, builds arm64 release, signs ad-hoc, packages a DMG, tags, and publishes a GitHub Release with the matching `CHANGELOG.md` section as notes. It also signs and publishes `appcast.xml` for in-app updates. The dedicated Sparkle key lives in the release maintainer’s Keychain under account `io.github.peytonnowlin.Headroom`; never replace it casually or commit/export the private key. See [release signing](docs/release-signing.md).
+Releases are cut with `script/release.sh vX.Y.Z` (locally, or through the **Release** GitHub Actions workflow), which runs the tests, builds arm64 release, signs ad-hoc, packages a DMG, tags, and publishes a GitHub Release with the matching `CHANGELOG.md` section as notes. It also signs and publishes `appcast.xml` for in-app updates. The dedicated Sparkle key lives in the release maintainer’s Keychain under account `io.github.peytonnowlin.Headroom`; never replace it casually or commit/export the private key. See [release signing](docs/release-signing.md).
 
 ## Credits
 
